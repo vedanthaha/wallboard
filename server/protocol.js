@@ -1,9 +1,12 @@
+// Shared protocol — validation for decoupled surfaces, media sources, strokes, and scenes
+
 export const MAX_POINTS_PER_STROKE = 12000;
 export const MAX_STROKES = 5000;
 
 export function isValidPoint(point) {
   return Boolean(
     point &&
+    typeof point === 'object' &&
     Number.isFinite(point.x) &&
     Number.isFinite(point.y) &&
     point.x >= 0 &&
@@ -14,9 +17,21 @@ export function isValidPoint(point) {
   );
 }
 
+export function isValidCornerPins(corners) {
+  return Boolean(
+    corners &&
+    typeof corners === 'object' &&
+    isValidPoint(corners.tl) &&
+    isValidPoint(corners.tr) &&
+    isValidPoint(corners.br) &&
+    isValidPoint(corners.bl)
+  );
+}
+
 export function isValidStroke(stroke) {
   return Boolean(
     stroke &&
+    typeof stroke === 'object' &&
     typeof stroke.id === 'string' &&
     stroke.id.length <= 80 &&
     typeof stroke.color === 'string' &&
@@ -28,18 +43,64 @@ export function isValidStroke(stroke) {
     stroke.points.length > 0 &&
     stroke.points.length <= MAX_POINTS_PER_STROKE &&
     stroke.points.every(isValidPoint) &&
+    (stroke.surfaceId === undefined || typeof stroke.surfaceId === 'string') &&
     (stroke.decaySeconds === undefined || (Number.isFinite(stroke.decaySeconds) && stroke.decaySeconds >= 0))
   );
 }
 
+export function isValidMediaSource(source) {
+  if (!source || typeof source !== 'object') return false;
+  if (typeof source.id !== 'string' || typeof source.name !== 'string') return false;
+  if (!source.data || typeof source.data !== 'object') return false;
+
+  const { type, config } = source.data;
+  if (!type || !config || typeof config !== 'object') return false;
+
+  switch (type) {
+    case 'solid':
+      return typeof config.color === 'string';
+    case 'gradient_linear':
+      return (
+        Number.isFinite(config.angle) &&
+        Array.isArray(config.stops) &&
+        config.stops.length >= 2 &&
+        config.stops.every((s) => Number.isFinite(s.offset) && typeof s.color === 'string')
+      );
+    case 'gradient_radial':
+      return (
+        Number.isFinite(config.centerX) &&
+        Number.isFinite(config.centerY) &&
+        Number.isFinite(config.radius) &&
+        Array.isArray(config.stops) &&
+        config.stops.length >= 2
+      );
+    case 'drawing':
+      return Array.isArray(config.strokes);
+    case 'image':
+      return typeof config.url === 'string';
+    case 'video':
+      return typeof config.url === 'string';
+    case 'text':
+      return typeof config.content === 'string';
+    case 'generative':
+      return typeof config.preset === 'string';
+    default:
+      return false;
+  }
+}
+
+export function isValidSurface(surface) {
+  if (!surface || typeof surface !== 'object') return false;
+  if (typeof surface.id !== 'string' || typeof surface.name !== 'string') return false;
+  if (typeof surface.sourceId !== 'string') return false;
+  if (!surface.geometry || !isValidCornerPins(surface.geometry.corners)) return false;
+  if (Number.isFinite(surface.opacity) && (surface.opacity < 0 || surface.opacity > 1)) return false;
+  return true;
+}
+
+// Backward-compatibility validators
 export function isValidQuad(quad) {
-  return Boolean(
-    quad &&
-    isValidPoint(quad.tl) &&
-    isValidPoint(quad.tr) &&
-    isValidPoint(quad.br) &&
-    isValidPoint(quad.bl)
-  );
+  return isValidCornerPins(quad);
 }
 
 export function isValidSpotlight(spotlight) {

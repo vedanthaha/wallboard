@@ -629,3 +629,212 @@ html, body, #root { height: 100%; }
   letter-spacing: 0.06em;
   color: var(--text-dim);
 }
+
+/* ── Surface Management & Inspector (Milestone 1) ── */
+.surface-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.surface-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.surface-item:hover {
+  background: var(--surface-2);
+  border-color: var(--border-hover);
+}
+
+.surface-item.active {
+  border-color: var(--accent);
+  background: rgba(0, 240, 255, 0.08);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+}
+
+.surface-item-name {
+  font: 700 11px var(--mono);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.surface-item-badge {
+  font: 600 9px var(--mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.surface-item.active .surface-item-badge {
+  background: rgba(0, 240, 255, 0.2);
+  color: var(--accent);
+}
+
+.surface-btn-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font: 700 10px var(--mono);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.surface-btn-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(0, 240, 255, 0.05);
+}
+
+/* ── Media Inspector ── */
+.inspector-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prop-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prop-label {
+  font: 700 9px var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.prop-value {
+  color: var(--accent);
+}
+
+.prop-input-select,
+.prop-input-text {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: 500 11px var(--mono);
+  color: var(--text);
+  outline: none;
+}
+
+.prop-input-select:focus,
+.prop-input-text:focus {
+  border-color: var(--accent);
+}
+
+.prop-slider {
+  accent-color: var(--accent);
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+}
+
+.color-stop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.color-picker-input {
+  -webkit-appearance: none;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+}
+
+.color-picker-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-picker-input::-webkit-color-swatch {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.color-hex-label {
+  font: 600 11px var(--mono);
+  color: var(--text);
+  flex: 1;
+}
+
+.stage-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.stage-overlay-svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.corner-pin-handle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
+  margin-top: -11px;
+  background: #000;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  box-shadow: 0 0 10px var(--accent);
+  cursor: grab;
+  pointer-events: auto;
+  display: grid;
+  place-items: center;
+  font: 800 8px var(--mono);
+  color: var(--accent);
+  user-select: none;
+  transition: transform 0.1s ease;
+}
+
+.corner-pin-handle:hover {
+  transform: scale(1.25);
+  background: var(--accent);
+  color: #000;
+}
+
+.corner-pin-handle.dragging {
+  cursor: grabbing;
+  transform: scale(1.35);
+  background: #fff;
+  border-color: #fff;
+  color: #000;
+  box-shadow: 0 0 16px #fff;
+}

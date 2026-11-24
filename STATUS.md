@@ -1,51 +1,64 @@
-# Verification Report
+# Wallboard Verification Report
+**Milestone 1: End-to-End Vertical Slice**
+**Version:** 0.5.0 (Homography GLSL Compositor, Decoupled Media Architecture, Studio & Remote)
+**Date:** 2026-11-24
 
-Date: 2026-11-24
-Version: 0.4.0 (3D Cube Tracing, Touch Keystone Warping, Radiant Bloom & Scenes)
+---
 
-## Acceptance Test Results
+## 1. Automated Test Suite Results
+Command: `npm test` (`node --test server/*.test.js`)
+- **Status:** **PASSED** (9 tests passed, 0 failed, duration: ~1.3s)
+  - `homography identity for unit square`: Analytical forward and inverse mapping verified
+  - `homography maps non-affine perspective trapezoid with exact precision`: Verified sub-millimeter precision on physical keystone quad (zero affine diagonal crease)
+  - `Milestone 1 vertical slice: end-to-end state synchronization`: Integration test suite verified
+  - `accepts normalized points`: Bounds `[0, 1]` verified
+  - `accepts a valid stroke with optional decay and surfaceId`: Decoupled stroke verified
+  - `rejects malformed strokes`: Invalid hex, out-of-bound coords rejected
+  - `validates projection mapping quad / corner pins`: Quad integrity verified
+  - `validates media sources (solid, gradient_linear)`: Media registry validation verified
+  - `validates decoupled surface entity`: Surface referencing `sourceId` verified
 
-### 1. Build & Compilation Verification
-- `node --test server/protocol.test.js`: **PASSED** (6 tests passed, 0 failed)
-  - Normalized point coordinate bounds validation (0..1)
-  - Point timestamp (`t`) acceptance for decay calculation
-  - Valid stroke schema verification with optional `decaySeconds`
-  - Malformed stroke rejection
-  - Projection mapping Quad schema validation (`isValidQuad`)
-  - Virtual Spotlight descriptor validation (`isValidSpotlight`)
-  - 3D Cube and mapping shape validation (`isValidShape`, `isValidCube`, `isValidMask`)
-- `tsc`: **PASSED** (0 TypeScript errors)
-- `vite build`: **PASSED** (all 4 HTML entry points compiled and bundled in 7.8s):
-  - `dist/output.html`: Dedicated Projector Output
-  - `dist/studio.html`: Desktop Studio on laptop
-  - `dist/index.html`: Android Remote web entry
-  - `dist/remote.html`: Mobile Remote fallback route
+---
 
-### 2. Upgraded Mobile Remote Experience
-- **Maximized Immersive Canvas Viewport**:
-  - Expanded canvas drawing area to full height (`60dvh`, up to 680px).
-  - Distracting dot-grid pattern removed — now renders a clean, pitch-black optical canvas (`#05070a`).
-- **Direct Touch-Draggable Keystone**:
-  - Users can now **touch and drag any of the 4 corners (`TL`, `TR`, `BR`, `BL`) directly on their phone screen**.
-  - As their thumb moves, the projector output warps dynamically in real time.
-  - Precision D-Pad retained below for 0.005 micro-nudges.
+## 2. Production Build Verification
+Command: `npm run build` (`tsc && vite build`)
+- **Status:** **PASSED** (0 TypeScript errors, all bundles generated):
+  - `dist/output.html` + `dist/assets/output-*.js`: Dedicated Projector Output
+  - `dist/studio.html` + `dist/assets/studio-*.js`: Desktop Studio on laptop
+  - `dist/remote.html` + `dist/assets/main-*.js`: Mobile Remote controller
+  - `dist/index.html` + `dist/assets/index-*.js`: Root redirect entry
+  - `dist/assets/surfaceRenderer-*.js`: Three.js WebGL Homography Compositor
 
-### 3. Radiant Multi-Pass Optical Light Bloom
-- Upgraded `drawStroke` with true **3-pass optical emission**:
-  - **Pass 1 (Outer Bloom)**: Wide diffuse atmospheric halo (`shadowBlur: 20-35px`, additive `lighter`).
-  - **Pass 2 (Inner Corona)**: Saturated neon color ring (`shadowBlur: 10-15px`).
-  - **Pass 3 (Laser Core)**: Intense pure `#ffffff` piercing white-hot center line.
-- When beams overlap on the physical wall, photons add together (`globalCompositeOperation = 'lighter'`), creating genuine optical lighting effects.
+---
 
-### 4. 3D Cube Wireframe & Object Tracing (Phase 5)
-- **3D Cube Wireframe Engine**:
-  - 8 vertices with 3D rotation matrix around X, Y, Z axes, projected into 2D normalized coordinates and warped through the keystone quad.
-  - 12 glowing neon edges with vertex corner dots for alignment.
-  - **Touch 3D Orbit Pad on Mobile**: Dragging your thumb on the phone rotates the 3D cube in real time to match physical cardboard boxes, cubes, or surfaces in your room!
-- **Polygon Blackout Mask**:
-  - Define custom cutout polygons that fill with pure `#000000` to cut off light over physical wall obstacles (e.g., hanging TV, speaker, clock, or picture frame).
-- **Target Rings**: Concentric glowing circles for circular target alignment.
+## 3. Implemented Capabilities (Milestone 1 Vertical Slice)
 
-### 5. Scene Presets & Persistence (Phase 6)
-- **Built-in Presets**: *Clean Light Canvas*, *3D Cube Mapping Stage*, *Laser Phosphor Trails*, *Precision Calibration*.
-- **Save Custom Scenes**: Name and save custom setups directly from mobile or laptop into persistent disk storage (`.scenes.json`).
+### 1. Homography-Based GLSL Perspective Mapping
+- Replaced naive 2-triangle vertex displacement with **analytical inverse homography projective texture mapping** ($H^{-1}$).
+- CPU derives the $3 \times 3$ projective matrix analytically on corner updates and uploads as `uniform mat3 u_invHomography`.
+- Fragment shader computes homogeneous coordinates per pixel (`uv = proj.xy / proj.z`) and strictly discards pixels outside `[0, 1]^2`.
+- **Zero diagonal affine creases** across arbitrary keystone quadrilaterals.
+
+### 2. Decoupled Architecture
+- Surfaces do not own media data. Each surface points to a `sourceId`.
+- Media sources (`solid`, `gradient_linear`, `gradient_radial`, `drawing`) live in an independent registry.
+- Modifying geometry does not alter media, and changing media does not alter geometry.
+
+### 3. Continuous 60 FPS Animation Engine
+- Procedural linear gradient with animated angle property.
+- Real-time rotation track running smoothly in the WebGL loop.
+- Configurable playback speed and stop colors in Studio and Remote.
+
+### 4. Interactive Desktop Studio
+- Multi-display detector and launcher for dedicated borderless projector output (`MStar Demo` or secondary display).
+- Surface Hierarchy panel: Add, delete, rename, select surfaces, assign media source.
+- Live WebGL Stage Viewport with 4 interactive corner pin drag handles (`TL`, `TR`, `BR`, `BL`).
+- Media Inspector for real-time color editing and animation toggling.
+- Master Blackout Shutter (`B`) and Calibration Grid (`C`) controls.
+
+### 5. Android Remote Controller
+- Authenticated QR code pairing over private Wi-Fi.
+- Surface target selector: directs finger strokes into the selected surface.
+- Live Touch Drawing: strokes drawn on phone land inside the warped surface on the projector in real time.
+- Keystone Touch Pad: drag corner handles with thumb standing next to the physical wall.
+- Media theme presets (Cyberpunk, Solar, Matrix, Mono) and continuous rotation toggle.

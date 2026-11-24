@@ -726,3 +726,460 @@ body {
   font: 10px 'DM Mono', monospace;
   color: #6d7380;
 }
+
+/* ── Remote App Redesign (Milestone 1) ── */
+.remote-app {
+  min-height: 100dvh;
+  background: #05070a;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px;
+  max-width: 600px;
+  margin: 0 auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.remote-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #161a22;
+  margin-bottom: 10px;
+}
+
+.remote-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark-sm {
+  width: 24px;
+  height: 24px;
+  background: #00f0ff;
+  color: #000;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font: 800 12px 'DM Mono', monospace;
+}
+
+.remote-surface-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.surface-label {
+  font: 700 9px 'DM Mono', monospace;
+  color: #7b8290;
+  letter-spacing: 0.1em;
+}
+
+.surface-select {
+  background: #11141c;
+  color: #00f0ff;
+  border: 1px solid #232a38;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: 700 11px 'DM Mono', monospace;
+  outline: none;
+}
+
+.remote-header-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-header-pill {
+  background: #12151c;
+  border: 1px solid #242a38;
+  color: #a0a8b6;
+  font: 700 9px 'DM Mono', monospace;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-header-pill.danger {
+  background: #ff0055;
+  border-color: #ff3377;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(255, 0, 85, 0.5);
+}
+
+.remote-nav {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  padding: 4px;
+  background: #0f1218;
+  border: 1px solid #1b202a;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.nav-btn {
+  background: transparent;
+  border: none;
+  padding: 8px 4px;
+  font: 700 10px 'DM Mono', monospace;
+  letter-spacing: 0.08em;
+  color: #767d8a;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.nav-btn.active {
+  background: #181c24;
+  color: #00f0ff;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+}
+
+/* ── TAB 1: DRAW ── */
+.remote-draw-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 10px;
+}
+
+.canvas-wrapper {
+  flex: 1;
+  min-height: 52dvh;
+  border: 1px solid #1f2532;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  position: relative;
+  touch-action: none;
+}
+
+.remote-touch-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.remote-palette-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #0c0e14;
+  border: 1px solid #1c222e;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.color-swatches {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.color-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.color-btn.active {
+  transform: scale(1.2);
+  border-color: #ffffff;
+  box-shadow: 0 0 10px #ffffff;
+}
+
+.tool-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #191e28;
+  border: 1px solid #2d3648;
+  color: #fff;
+  font: 14px monospace;
+  cursor: pointer;
+}
+
+.tool-btn.active {
+  background: #ff3b30;
+  border-color: #ff3b30;
+  box-shadow: 0 0 8px #ff3b30;
+}
+
+.action-buttons-row {
+  display: flex;
+  gap: 6px;
+}
+
+.laser-pill,
+.btn-undo-pill,
+.btn-clear-pill {
+  flex: 1;
+  background: #141822;
+  border: 1px solid #242c3c;
+  color: #a0a8b6;
+  font: 700 9px 'DM Mono', monospace;
+  letter-spacing: 0.08em;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.laser-pill.active {
+  background: #00f0ff;
+  color: #000;
+  border-color: #00f0ff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+}
+
+/* ── TAB 2: KEYSTONE / WARP ── */
+.remote-warp-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 12px;
+}
+
+.warp-pad-container {
+  min-height: 44dvh;
+  border: 1px solid #1f2532;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #080a0f;
+  touch-action: none;
+}
+
+.warp-touch-pad {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.warp-controls-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #0c0e14;
+  border: 1px solid #1c222e;
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.corner-selector-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.corner-tab-btn {
+  background: #131720;
+  border: 1px solid #222a3a;
+  border-radius: 6px;
+  padding: 8px 4px;
+  font: 700 11px 'DM Mono', monospace;
+  color: #8b92a0;
+  cursor: pointer;
+}
+
+.corner-tab-btn.active {
+  background: #00f0ff;
+  color: #000;
+  border-color: #00f0ff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
+}
+
+.dpad-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.dpad-middle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dpad-center {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: #141822;
+  border: 1px solid #283244;
+  display: grid;
+  place-items: center;
+  font: 700 12px 'DM Mono', monospace;
+  color: #00f0ff;
+}
+
+.dpad-btn {
+  width: 52px;
+  height: 44px;
+  background: #181d28;
+  border: 1px solid #2b3548;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.dpad-btn:active {
+  background: #00f0ff;
+  color: #000;
+}
+
+/* ── TAB 3: MEDIA ── */
+.remote-media-view {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.media-card {
+  background: #0c0e14;
+  border: 1px solid #1c222e;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.media-card h3 {
+  font: 700 10px 'DM Mono', monospace;
+  letter-spacing: 0.1em;
+  color: #00f0ff;
+  margin: 0;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.preset-theme-btn {
+  border: 1px solid #2b3344;
+  border-radius: 8px;
+  padding: 14px 10px;
+  font: 700 10px 'DM Mono', monospace;
+  color: #fff;
+  cursor: pointer;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+.btn-media-toggle {
+  background: #141822;
+  border: 1px solid #252d3d;
+  border-radius: 8px;
+  padding: 12px;
+  font: 700 11px 'DM Mono', monospace;
+  color: #a0a8b6;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-media-toggle.active {
+  background: rgba(0, 240, 255, 0.15);
+  border-color: #00f0ff;
+  color: #00f0ff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+}
+
+.btn-media-toggle.active-grid {
+  background: #00f0ff;
+  color: #000;
+  border-color: #00f0ff;
+}
+
+/* ── Mobile Authentication Screen ── */
+.remote-auth-wrap {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: #05070a;
+  padding: 16px;
+}
+
+.remote-auth-card {
+  width: 100%;
+  max-width: 360px;
+  background: #0c0f16;
+  border: 1px solid #1e2534;
+  border-radius: 14px;
+  padding: 24px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: center;
+}
+
+.remote-auth-header h1 {
+  font: 700 18px 'DM Mono', monospace;
+  letter-spacing: 0.14em;
+  color: #fff;
+  margin: 8px 0 4px;
+}
+
+.auth-sub {
+  font: 400 10px 'DM Mono', monospace;
+  color: #727b8a;
+  letter-spacing: 0.1em;
+}
+
+.code-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.code-input {
+  background: #07090e;
+  border: 1px solid #252e40;
+  border-radius: 8px;
+  padding: 12px;
+  font: 700 16px 'DM Mono', monospace;
+  letter-spacing: 0.2em;
+  color: #00f0ff;
+  text-align: center;
+  outline: none;
+}
+
+.code-input:focus {
+  border-color: #00f0ff;
+}
+
+.btn-connect {
+  background: #00f0ff;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font: 700 12px 'DM Mono', monospace;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-connect:hover {
+  background: #33f3ff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.4);
+}
+
+.auth-status-bar {
+  font: 400 11px 'DM Mono', monospace;
+  color: #8c94a4;
+}

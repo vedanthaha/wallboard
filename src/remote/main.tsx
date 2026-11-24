@@ -2,33 +2,31 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { io, Socket } from 'socket.io-client';
 import {
-  drawStroke,
   generateStrokeId,
-  Stroke,
-  Quad,
-  DEFAULT_QUAD,
-  LIGHT_PALETTE,
-  MappingShape,
-  CubeShape,
+  drawStroke,
   getCornerHandleUnderTouch,
-  Point
+  LIGHT_PALETTE
 } from '../shared/drawing';
-import { Scene } from '../shared/protocol';
+import {
+  Surface,
+  MediaSource,
+  DrawingStroke,
+  CornerPins,
+  LinearGradientConfig
+} from '../shared/protocol';
 import '../style.css';
 
 const params = new URLSearchParams(window.location.search);
 const codeFromUrl = params.get('code') || '';
 
-type RemoteTab = 'draw' | 'laser' | 'torch' | 'warp' | 'shapes' | 'scenes';
+type RemoteTab = 'draw' | 'warp' | 'media';
 
 function Remote() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const torchPadRef = useRef<HTMLDivElement>(null);
   const warpPadRef = useRef<HTMLCanvasElement>(null);
-  const orbitPadRef = useRef<HTMLDivElement>(null);
 
-  const strokesRef = useRef<Stroke[]>([]);
-  const activeRef = useRef<Stroke | null>(null);
+  const strokesRef = useRef<DrawingStroke[]>([]);
+  const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   const [connected, setConnected] = useState(false);
@@ -36,37 +34,29 @@ function Remote() {
   const [joined, setJoined] = useState(false);
   const [message, setMessage] = useState('Connecting to laptop…');
 
-  // Mode and light controls
+  // Authoritative state
+  const [surfaces, setSurfaces] = useState<Surface[]>([]);
+  const [sources, setSources] = useState<Record<string, MediaSource>>({});
+  const [activeSurfaceId, setActiveSurfaceId] = useState<string>('surface-1');
+  const [isBlackout, setIsBlackout] = useState(false);
+  const [isCalibration, setIsCalibration] = useState(false);
+
+  // Drawing controls
   const [tab, setTab] = useState<RemoteTab>('draw');
   const [tool, setTool] = useState<'pen' | 'eraser'>('pen');
   const [color, setColor] = useState('#00f0ff');
-  const [width, setWidth] = useState(0.008);
-  const [laserDecay, setLaserDecay] = useState(2.5); // seconds
+  const [width, setWidth] = useState(0.01);
+  const [laserDecay, setLaserDecay] = useState(0); // 0 = persistent
 
-  // Torch / Spotlight state
-  const [torchPos, setTorchPos] = useState({ x: 0.5, y: 0.5, active: false });
-  const [torchRadius, setTorchRadius] = useState(0.12);
-  const [torchColor, setTorchColor] = useState('#ffffff');
-
-  // Projection Mapping / Keystone state
-  const [quad, setQuad] = useState<Quad>({ ...DEFAULT_QUAD });
+  // Corner pin / keystone touch state
   const [activeCorner, setActiveCorner] = useState<'tl' | 'tr' | 'br' | 'bl'>('tl');
   const [draggingCornerMobile, setDraggingCornerMobile] = useState<'tl' | 'tr' | 'br' | 'bl' | null>(null);
   const [warpStep, setWarpStep] = useState(0.01);
 
-  // Geometric 3D Shapes & Tracing (Phase 5)
-  const [shapes, setShapes] = useState<MappingShape[]>([]);
-  const [activeCube, setActiveCube] = useState<CubeShape | null>(null);
+  const activeSurface = surfaces.find((s) => s.id === activeSurfaceId) || surfaces[0];
+  const activeSource = activeSurface ? sources[activeSurface.sourceId] : undefined;
 
-  // Scenes & Presets (Phase 6)
-  const [scenes, setScenes] = useState<Scene[]>([]);
-  const [newSceneName, setNewSceneName] = useState('');
-
-  // Optical toggles
-  const [isBlackout, setIsBlackout] = useState(false);
-  const [isCalibration, setIsCalibration] = useState(false);
-
-  // Render Mobile Drawing Canvas
+  // Render Mobile Surface Drawing Canvas
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -86,19 +76,50 @@ function Remote() {
     if (!ctx) return;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // Pure clean optical canvas — NO distracting dots
-    ctx.fillStyle = '#05070a';
-    ctx.fillRect(0, 0, rect.width, rect.height);
 
-    for (const stroke of strokesRef.current) {
-      drawStroke(ctx, stroke, rect.width, rect.height, true);
+    // Render surface background preview
+    if (activeSource && activeSource.data.type === 'gradient_linear') {
+      const grad = ctx.createLinearGradient(0, 0, rect.width, rect.height);
+      for (const stop of activeSource.data.config.stops) {
+        grad.addColorStop(stop.offset, stop.color);
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      // Subtle darkening overlay so drawing stands out clearly
+      ctx.fillStyle = 'rgba(5, 7, 10, 0.4)';
+      ctx.fillRect(0, 0, rect.width, rect.height);
+    } else {
+      ctx.fillStyle = '#05070a';
+      ctx.fillRect(0, 0, rect.width, rect.height);
     }
-  }, []);
 
-  // Render Touch-Draggable Keystone Canvas on Mobile
+    // Render strokes for active surface
+    const now = Date.now();
+    for (const stroke of strokesRef.current) {
+      if (stroke.surfaceId && stroke.surfaceId !== activeSurfaceId) continue;
+
+      let alpha = 1;
+      if (stroke.decaySeconds && stroke.decaySeconds > 0) {
+        const created = stroke.createdAt || now;
+        const ageMs = now - created;
+        const totalMs = stroke.decaySeconds * 1000;
+        if (ageMs >= totalMs) continue;
+        alpha = Math.max(0, 1 - ageMs / totalMs);
+      }
+
+      drawStroke(ctx, stroke as any, rect.width, rect.height, true, undefined, alpha);
+    }
+
+    // Active live stroke
+    if (activeStrokeRef.current) {
+      drawStroke(ctx, activeStrokeRef.current as any, rect.width, rect.height, true);
+    }
+  }, [activeSurfaceId, activeSource]);
+
+  // Render Mobile Keystone Touch Pad
   const renderWarpTouchPad = useCallback(() => {
     const canvas = warpPadRef.current;
-    if (!canvas) return;
+    if (!canvas || !activeSurface) return;
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
 
@@ -118,10 +139,11 @@ function Remote() {
     ctx.fillStyle = '#080a0f';
     ctx.fillRect(0, 0, rect.width, rect.height);
 
-    const tl = { x: quad.tl.x * rect.width, y: quad.tl.y * rect.height };
-    const tr = { x: quad.tr.x * rect.width, y: quad.tr.y * rect.height };
-    const br = { x: quad.br.x * rect.width, y: quad.br.y * rect.height };
-    const bl = { x: quad.bl.x * rect.width, y: quad.bl.y * rect.height };
+    const corners = activeSurface.geometry.corners;
+    const tl = { x: corners.tl.x * rect.width, y: corners.tl.y * rect.height };
+    const tr = { x: corners.tr.x * rect.width, y: corners.tr.y * rect.height };
+    const br = { x: corners.br.x * rect.width, y: corners.br.y * rect.height };
+    const bl = { x: corners.bl.x * rect.width, y: corners.bl.y * rect.height };
 
     // Warped quad outline
     ctx.strokeStyle = '#00f0ff';
@@ -148,30 +170,46 @@ function Remote() {
     ctx.stroke();
 
     // Large finger-touch handles for each corner
-    const drawTouchHandle = (pos: { x: number; y: number }, label: string, isCurrent: boolean) => {
-      ctx.save();
-      ctx.fillStyle = isCurrent ? '#ffffff' : '#00f0ff';
-      ctx.shadowColor = '#00f0ff';
-      ctx.shadowBlur = isCurrent ? 20 : 8;
+    const handleRadius = 24;
+    const handles = [
+      { key: 'tl', pos: tl, label: 'TL' },
+      { key: 'tr', pos: tr, label: 'TR' },
+      { key: 'br', pos: br, label: 'BR' },
+      { key: 'bl', pos: bl, label: 'BL' }
+    ] as const;
+
+    for (const h of handles) {
+      const isSelected = activeCorner === h.key;
+      const isDragging = draggingCornerMobile === h.key;
 
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, isCurrent ? 18 : 14, 0, Math.PI * 2);
+      ctx.arc(h.pos.x, h.pos.y, handleRadius, 0, Math.PI * 2);
+      ctx.fillStyle = isDragging ? '#ffffff' : isSelected ? '#00f0ff' : '#141824';
       ctx.fill();
 
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#000000';
-      ctx.font = 'bold 10px monospace';
+      ctx.lineWidth = isSelected ? 3 : 2;
+      ctx.strokeStyle = isSelected ? '#ffffff' : '#00f0ff';
+      ctx.stroke();
+
+      ctx.fillStyle = isDragging || isSelected ? '#000000' : '#00f0ff';
+      ctx.font = 'bold 11px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(label, pos.x, pos.y);
-      ctx.restore();
-    };
+      ctx.fillText(h.label, h.pos.x, h.pos.y);
+    }
+  }, [activeSurface, activeCorner, draggingCornerMobile]);
 
-    drawTouchHandle(tl, 'TL', activeCorner === 'tl' || draggingCornerMobile === 'tl');
-    drawTouchHandle(tr, 'TR', activeCorner === 'tr' || draggingCornerMobile === 'tr');
-    drawTouchHandle(br, 'BR', activeCorner === 'br' || draggingCornerMobile === 'br');
-    drawTouchHandle(bl, 'BL', activeCorner === 'bl' || draggingCornerMobile === 'bl');
-  }, [quad, activeCorner, draggingCornerMobile]);
+  // Animation frame loop
+  useEffect(() => {
+    let animId: number;
+    const loop = () => {
+      animId = requestAnimationFrame(loop);
+      if (tab === 'draw') renderCanvas();
+      else if (tab === 'warp') renderWarpTouchPad();
+    };
+    animId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animId);
+  }, [tab, renderCanvas, renderWarpTouchPad]);
 
   // Connect to server
   useEffect(() => {
@@ -180,7 +218,8 @@ function Remote() {
 
     socket.on('connect', () => {
       setConnected(true);
-      if (code.length === 6) {
+      setMessage('Connected. Authenticating…');
+      if (code) {
         socket.emit('join', { code: code.toUpperCase(), role: 'remote' });
       }
     });
@@ -188,812 +227,498 @@ function Remote() {
     socket.on('disconnect', () => {
       setConnected(false);
       setJoined(false);
+      setMessage('Disconnected from laptop.');
     });
 
-    socket.on('join:error', (text: string) => {
+    socket.on('join:error', (err: string) => {
       setJoined(false);
-      setMessage(text);
+      setMessage(err || 'Failed to authenticate.');
     });
 
-    socket.on('board:init', (strokes: Stroke[]) => {
-      strokesRef.current = Array.isArray(strokes) ? [...strokes] : [];
+    socket.on('state:init', (st) => {
       setJoined(true);
-      setMessage('Connected · Ready to project');
-      renderCanvas();
+      setMessage('Paired with Wallboard Studio');
+      if (Array.isArray(st.surfaces)) setSurfaces(st.surfaces);
+      if (st.sources) setSources(st.sources);
+      if (st.activeSurfaceId) setActiveSurfaceId(st.activeSurfaceId);
+      if (Array.isArray(st.strokes)) strokesRef.current = st.strokes;
+      if (st.masterBlackout !== undefined) setIsBlackout(st.masterBlackout);
+      if (st.calibrationActive !== undefined) setIsCalibration(st.calibrationActive);
     });
 
-    socket.on('warp:update', (serverQuad: Quad) => {
-      if (serverQuad) setQuad(serverQuad);
+    socket.on('surfaces:sync', (data) => {
+      if (Array.isArray(data.surfaces)) setSurfaces(data.surfaces);
+      if (data.activeSurfaceId) setActiveSurfaceId(data.activeSurfaceId);
     });
 
-    socket.on('shapes:update', (updatedShapes: MappingShape[]) => {
-      if (Array.isArray(updatedShapes)) {
-        setShapes(updatedShapes);
-        const cube = updatedShapes.find((s) => s.type === 'cube') as CubeShape;
-        if (cube) setActiveCube(cube);
-      }
+    socket.on('surface:update', (updated: Surface) => {
+      setSurfaces((prev) => {
+        const idx = prev.findIndex((s) => s.id === updated.id);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = updated;
+          return next;
+        }
+        return [...prev, updated];
+      });
     });
 
-    socket.on('scenes:update', (updatedScenes: Scene[]) => {
-      if (Array.isArray(updatedScenes)) setScenes(updatedScenes);
+    socket.on('surface:corners', ({ surfaceId, corners }: { surfaceId: string; corners: CornerPins }) => {
+      setSurfaces((prev) =>
+        prev.map((s) => (s.id === surfaceId ? { ...s, geometry: { ...s.geometry, corners } } : s))
+      );
     });
 
-    socket.on('calibration:update', (active: boolean) => {
-      setIsCalibration(Boolean(active));
+    socket.on('source:update', (source: MediaSource) => {
+      setSources((prev) => ({ ...prev, [source.id]: source }));
     });
 
-    socket.on('blackout:update', (active: boolean) => {
-      setIsBlackout(Boolean(active));
+    socket.on('source:sync', (allSources: Record<string, MediaSource>) => {
+      setSources(allSources);
     });
 
-    socket.on('stroke:add', (stroke: Stroke) => {
-      const index = strokesRef.current.findIndex((item) => item.id === stroke.id);
-      if (index >= 0) strokesRef.current[index] = stroke;
+    socket.on('stroke:add', (stroke: DrawingStroke) => {
+      const idx = strokesRef.current.findIndex((s) => s.id === stroke.id);
+      if (idx >= 0) strokesRef.current[idx] = stroke;
       else strokesRef.current.push(stroke);
-      renderCanvas();
     });
 
     socket.on('board:undo', (id: string) => {
-      strokesRef.current = strokesRef.current.filter((s) => s.id !== id);
-      renderCanvas();
+      const idx = strokesRef.current.findIndex((s) => s.id === id);
+      if (idx >= 0) strokesRef.current.splice(idx, 1);
     });
 
     socket.on('board:clear', () => {
-      strokesRef.current = [];
-      renderCanvas();
+      strokesRef.current.length = 0;
+    });
+
+    socket.on('blackout:update', (val: boolean) => setIsBlackout(val));
+    socket.on('calibration:update', (val: boolean) => setIsCalibration(val));
+
+    // Backward compatibility
+    socket.on('board:init', (stk: DrawingStroke[]) => {
+      if (Array.isArray(stk)) {
+        strokesRef.current = stk;
+        setJoined(true);
+      }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [code, renderCanvas]);
+  }, [code]);
 
-  useEffect(() => {
-    if (!joined) return;
-    renderCanvas();
-    const observer = new ResizeObserver(() => renderCanvas());
-    if (canvasRef.current) observer.observe(canvasRef.current);
-    window.addEventListener('resize', renderCanvas);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', renderCanvas);
-    };
-  }, [joined, renderCanvas]);
-
-  useEffect(() => {
-    if (tab === 'warp') {
-      renderWarpTouchPad();
-    }
-  }, [tab, quad, activeCorner, draggingCornerMobile, renderWarpTouchPad]);
-
-  const pointFrom = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  // Touch drawing handlers
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (tab !== 'draw' || !activeSurface) return;
     const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
+    if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return { x: 0, y: 0 };
-    const clampedX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    const clampedY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-    return {
-      x: Number.isFinite(clampedX) ? Math.round(clampedX * 10000) / 10000 : 0,
-      y: Number.isFinite(clampedY) ? Math.round(clampedY * 10000) / 10000 : 0,
-      t: Date.now()
-    };
-  };
+    const touch = e.touches[0];
+    const x = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height));
 
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!joined) return;
-    event.preventDefault();
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {}
-
-    const point = pointFrom(event);
-    const isEraser = tool === 'eraser' && tab === 'draw';
-    const isLaser = tab === 'laser';
-
-    const stroke: Stroke = {
+    const stroke: DrawingStroke = {
       id: generateStrokeId(),
-      color: isEraser ? '#000000' : color,
-      width: isEraser ? 0.04 : width,
-      points: [point],
+      color: tool === 'eraser' ? '#000000' : color,
+      width: tool === 'eraser' ? width * 3 : width,
+      points: [{ x, y, t: Date.now() }],
       createdAt: Date.now(),
-      decaySeconds: isLaser ? laserDecay : undefined
+      surfaceId: activeSurface.id,
+      decaySeconds: laserDecay > 0 ? laserDecay : undefined
     };
 
-    activeRef.current = stroke;
+    activeStrokeRef.current = stroke;
     strokesRef.current.push(stroke);
-    renderCanvas();
     socketRef.current?.emit('stroke:add', stroke);
   };
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!activeRef.current) return;
-    event.preventDefault();
-    const point = pointFrom(event);
-    activeRef.current.points.push(point);
-    renderCanvas();
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!activeStrokeRef.current || tab !== 'draw') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const x = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height));
 
-    if (activeRef.current.points.length % 2 === 0) {
-      socketRef.current?.emit('stroke:add', activeRef.current);
+    activeStrokeRef.current.points.push({ x, y, t: Date.now() });
+    socketRef.current?.emit('stroke:add', activeStrokeRef.current);
+  };
+
+  const handleTouchEnd = () => {
+    activeStrokeRef.current = null;
+  };
+
+  // Keystone / Warp touch handlers
+  const handleWarpTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = warpPadRef.current;
+    if (!canvas || !activeSurface) return;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const touchX = (touch.clientX - rect.left) / rect.width;
+    const touchY = (touch.clientY - rect.top) / rect.height;
+
+    const corner = getCornerHandleUnderTouch({ x: touchX, y: touchY }, activeSurface.geometry.corners, 0.12);
+    if (corner) {
+      setActiveCorner(corner);
+      setDraggingCornerMobile(corner);
     }
   };
 
-  const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!activeRef.current) return;
-    try {
-      if (event?.currentTarget && event?.pointerId) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-    } catch {}
-    socketRef.current?.emit('stroke:add', activeRef.current);
-    activeRef.current = null;
-    renderCanvas();
-  };
-
-  // Direct Touch-Dragging for Keystone Quad on Mobile
-  const handleWarpTouchDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const handleWarpTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!draggingCornerMobile || !activeSurface) return;
     const canvas = warpPadRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+    const touch = e.touches[0];
+    const x = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height));
 
-    const hit = getCornerHandleUnderTouch({ x, y }, quad, 0.14);
-    if (hit) {
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch {}
-      setActiveCorner(hit);
-      setDraggingCornerMobile(hit);
-    }
-  };
-
-  const handleWarpTouchMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!draggingCornerMobile) return;
-    const canvas = warpPadRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-
-    const nextQuad = { ...quad };
-    nextQuad[draggingCornerMobile] = {
-      x: Math.round(x * 1000) / 1000,
-      y: Math.round(y * 1000) / 1000
+    const updatedCorners: CornerPins = {
+      ...activeSurface.geometry.corners,
+      [draggingCornerMobile]: { x, y }
     };
-    setQuad(nextQuad);
-    socketRef.current?.emit('warp:update', nextQuad);
-  };
 
-  const handleWarpTouchUp = () => {
-    setDraggingCornerMobile(null);
-  };
+    setSurfaces((prev) =>
+      prev.map((s) => (s.id === activeSurface.id ? { ...s, geometry: { ...s.geometry, corners: updatedCorners } } : s))
+    );
 
-  // 4-Corner Nudge for micro keystone calibration
-  const nudgeCorner = (dx: number, dy: number) => {
-    const nextQuad = { ...quad };
-    const pt = { ...nextQuad[activeCorner] };
-    pt.x = Math.min(1, Math.max(0, Math.round((pt.x + dx) * 1000) / 1000));
-    pt.y = Math.min(1, Math.max(0, Math.round((pt.y + dy) * 1000) / 1000));
-    nextQuad[activeCorner] = pt;
-    setQuad(nextQuad);
-    socketRef.current?.emit('warp:update', nextQuad);
-  };
-
-  const resetQuad = () => {
-    const fresh = { ...DEFAULT_QUAD };
-    setQuad(fresh);
-    socketRef.current?.emit('warp:update', fresh);
-  };
-
-  // 3D Cube Tracing Controls (Phase 5)
-  const addOrUpdateCube = (updates: Partial<CubeShape>) => {
-    const existing = activeCube || {
-      id: 'cube_' + Date.now().toString(36),
-      type: 'cube' as const,
-      x: 0.5,
-      y: 0.5,
-      size: 0.22,
-      rotX: 25,
-      rotY: 35,
-      rotZ: 0,
-      color: '#00ffff',
-      lineWidth: 3
-    };
-    const updated = { ...existing, ...updates };
-    setActiveCube(updated);
-    socketRef.current?.emit('shape:add', updated);
-  };
-
-  // 3D Orbit Trackpad: drag finger to rotate 3D cube
-  const lastTouchRef = useRef<{ x: number; y: number } | null>(null);
-  const handleOrbitPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {}
-    lastTouchRef.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handleOrbitPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!lastTouchRef.current || !activeCube) return;
-    const dx = e.clientX - lastTouchRef.current.x;
-    const dy = e.clientY - lastTouchRef.current.y;
-    lastTouchRef.current = { x: e.clientX, y: e.clientY };
-
-    const nextRotY = (activeCube.rotY + dx * 0.8) % 360;
-    const nextRotX = Math.max(-85, Math.min(85, activeCube.rotX - dy * 0.8));
-
-    addOrUpdateCube({ rotX: Math.round(nextRotX), rotY: Math.round(nextRotY) });
-  };
-
-  const handleOrbitPointerUp = () => {
-    lastTouchRef.current = null;
-  };
-
-  // Torch / Spotlight touch handling
-  const handleTorchPointer = (event: React.PointerEvent<HTMLDivElement>, isEnd: boolean = false) => {
-    event.preventDefault();
-    const pad = torchPadRef.current;
-    if (!pad) return;
-    const rect = pad.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-
-    if (isEnd) {
-      setTorchPos((prev) => ({ ...prev, active: false }));
-      socketRef.current?.emit('spotlight:end');
-      return;
-    }
-
-    try {
-      if (event.type === 'pointerdown') event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {}
-
-    const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-    const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
-
-    setTorchPos({ x, y, active: true });
-    socketRef.current?.emit('spotlight:move', {
-      x: Math.round(x * 1000) / 1000,
-      y: Math.round(y * 1000) / 1000,
-      radius: torchRadius,
-      color: torchColor,
-      active: true
+    socketRef.current?.emit('surface:corners', {
+      surfaceId: activeSurface.id,
+      corners: updatedCorners
     });
   };
 
-  const toggleTab = (nextTab: RemoteTab) => {
-    setTab(nextTab);
-    if (nextTab === 'warp') {
-      socketRef.current?.emit('calibration:set', true);
-    }
+  const handleWarpTouchEnd = () => {
+    setDraggingCornerMobile(null);
   };
 
-  return (
-    <main className="remote-shell dark">
-      {/* Top Console Bar */}
-      <header className="remote-header">
-        <div className="brand">
-          <span className="brand-mark">W</span>
-          <span className="brand-title">WALLBOARD</span>
+  const handleCornerNudge = (dx: number, dy: number) => {
+    if (!activeSurface) return;
+    const current = activeSurface.geometry.corners[activeCorner];
+    const nx = Math.max(0, Math.min(1, current.x + dx * warpStep));
+    const ny = Math.max(0, Math.min(1, current.y + dy * warpStep));
+
+    const updatedCorners: CornerPins = {
+      ...activeSurface.geometry.corners,
+      [activeCorner]: { x: nx, y: ny }
+    };
+
+    setSurfaces((prev) =>
+      prev.map((s) => (s.id === activeSurface.id ? { ...s, geometry: { ...s.geometry, corners: updatedCorners } } : s))
+    );
+
+    socketRef.current?.emit('surface:corners', {
+      surfaceId: activeSurface.id,
+      corners: updatedCorners
+    });
+  };
+
+  // Quick media actions from phone
+  const handleToggleGradientAnim = () => {
+    if (!activeSurface) return;
+    const existing = activeSurface.animations?.find((a) => a.targetProperty === 'source.config.angle');
+    let nextAnimations = activeSurface.animations || [];
+    if (existing) {
+      nextAnimations = nextAnimations.map((a) =>
+        a.id === existing.id ? { ...a, enabled: !a.enabled } : a
+      );
+    } else {
+      nextAnimations.push({
+        id: `anim-rot-${Date.now().toString(36)}`,
+        enabled: true,
+        targetProperty: 'source.config.angle',
+        duration: 8,
+        loop: true,
+        playbackSpeed: 1,
+        keyframes: [
+          { time: 0, value: 0 },
+          { time: 8, value: 360 }
+        ]
+      });
+    }
+    const updated = { ...activeSurface, animations: nextAnimations };
+    socketRef.current?.emit('surface:update', updated);
+    setSurfaces((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+  };
+
+  const handleSetGradientColors = (color1: string, color2: string) => {
+    if (!activeSource || activeSource.data.type !== 'gradient_linear') return;
+    const currentConfig = activeSource.data.config;
+    const updatedSource: MediaSource = {
+      ...activeSource,
+      data: {
+        type: 'gradient_linear',
+        config: {
+          ...currentConfig,
+          stops: [
+            { offset: 0, color: color1 },
+            { offset: 1, color: color2 }
+          ]
+        }
+      }
+    };
+    socketRef.current?.emit('source:update', updatedSource);
+    setSources((prev) => ({ ...prev, [updatedSource.id]: updatedSource }));
+  };
+
+  if (!joined) {
+    return (
+      <div className="remote-auth-wrap">
+        <div className="remote-auth-card">
+          <div className="remote-auth-header">
+            <div className="brand-mark">W</div>
+            <h1>WALLBOARD REMOTE</h1>
+            <p className="auth-sub">CONNECT TO PROJECTION STUDIO</p>
+          </div>
+
+          <div className="code-input-group">
+            <input
+              type="text"
+              className="code-input"
+              value={code}
+              placeholder="ENTER 6-DIGIT CODE"
+              maxLength={6}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+            />
+            <button
+              className="btn-connect"
+              onClick={() => {
+                if (socketRef.current && code) {
+                  socketRef.current.emit('join', { code: code.toUpperCase(), role: 'remote' });
+                }
+              }}
+            >
+              AUTHENTICATE
+            </button>
+          </div>
+
+          <div className="auth-status-bar">{message}</div>
         </div>
-        <div className="remote-quick-actions">
+      </div>
+    );
+  }
+
+  return (
+    <div className="remote-app">
+      {/* ── Mobile Header ── */}
+      <header className="remote-header">
+        <div className="remote-header-brand">
+          <div className="brand-mark-sm">W</div>
+          <div className="remote-surface-picker">
+            <span className="surface-label">TARGET:</span>
+            <select
+              className="surface-select"
+              value={activeSurfaceId}
+              onChange={(e) => {
+                setActiveSurfaceId(e.target.value);
+                socketRef.current?.emit('surface:select', e.target.value);
+              }}
+            >
+              {surfaces.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="remote-header-actions">
           <button
-            className={`btn-shutter ${isBlackout ? 'active' : ''}`}
+            className={`btn-header-pill ${isBlackout ? 'danger' : ''}`}
             onClick={() => socketRef.current?.emit('blackout:toggle')}
-            title="Projector Blackout Shutter"
           >
-            {isBlackout ? '● BLACKOUT ON' : '○ SHUTTER'}
+            {isBlackout ? 'BLACKOUT' : 'SHUTTER'}
           </button>
-          <button
-            className={`btn-grid ${isCalibration ? 'active' : ''}`}
-            onClick={() => socketRef.current?.emit('calibration:toggle')}
-            title="Toggle Calibration Grid"
-          >
-            ⛶ GRID
-          </button>
-          <span className="remote-status">
-            <i className={joined ? 'online' : ''} />
-            {joined ? code : 'OFFLINE'}
-          </span>
         </div>
       </header>
 
-      {/* Pairing View if not joined */}
-      {!joined && (
-        <section className="join-panel">
-          <span className="eyebrow">PROJECTOR REMOTE CONTROLLER</span>
-          <h1>Manipulate light on your wall.</h1>
-          <p>{message}</p>
-          <label>
-            ENTER 6-DIGIT SESSION CODE
-            <input
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
-              placeholder="9V28Z2"
-              maxLength={6}
+      {/* ── Mode Navigation Tabs ── */}
+      <nav className="remote-nav">
+        <button className={`nav-btn ${tab === 'draw' ? 'active' : ''}`} onClick={() => setTab('draw')}>
+          DRAW
+        </button>
+        <button className={`nav-btn ${tab === 'warp' ? 'active' : ''}`} onClick={() => setTab('warp')}>
+          KEYSTONE
+        </button>
+        <button className={`nav-btn ${tab === 'media' ? 'active' : ''}`} onClick={() => setTab('media')}>
+          MEDIA
+        </button>
+      </nav>
+
+      {/* ── TAB 1: DRAW ── */}
+      {tab === 'draw' && (
+        <div className="remote-draw-view">
+          <div className="canvas-wrapper">
+            <canvas
+              ref={canvasRef}
+              className="remote-touch-canvas"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             />
-          </label>
-          <button
-            className="primary"
-            disabled={code.length !== 6 || !connected}
-            onClick={() => socketRef.current?.emit('join', { code: code.toUpperCase(), role: 'remote' })}
-          >
-            CONNECT TO PROJECTOR
-          </button>
-        </section>
-      )}
+          </div>
 
-      {/* Main Lighting Console */}
-      {joined && (
-        <section className="console-panel">
-          {/* Navigation Tabs (Drawing, Laser, Torch, Keystone, 3D Cubes, Scenes) */}
-          <nav className="mode-tabs">
-            <button
-              className={`mode-tab ${tab === 'draw' ? 'active' : ''}`}
-              onClick={() => toggleTab('draw')}
-            >
-              <span className="tab-icon">🎨</span>
-              <span className="tab-label">DRAW</span>
-            </button>
-            <button
-              className={`mode-tab ${tab === 'laser' ? 'active' : ''}`}
-              onClick={() => toggleTab('laser')}
-            >
-              <span className="tab-icon">⚡</span>
-              <span className="tab-label">LASER</span>
-            </button>
-            <button
-              className={`mode-tab ${tab === 'torch' ? 'active' : ''}`}
-              onClick={() => toggleTab('torch')}
-            >
-              <span className="tab-icon">🔦</span>
-              <span className="tab-label">TORCH</span>
-            </button>
-            <button
-              className={`mode-tab ${tab === 'warp' ? 'active' : ''}`}
-              onClick={() => toggleTab('warp')}
-            >
-              <span className="tab-icon">📐</span>
-              <span className="tab-label">WARP</span>
-            </button>
-            <button
-              className={`mode-tab ${tab === 'shapes' ? 'active' : ''}`}
-              onClick={() => toggleTab('shapes')}
-            >
-              <span className="tab-icon">📦</span>
-              <span className="tab-label">3D CUBE</span>
-            </button>
-            <button
-              className={`mode-tab ${tab === 'scenes' ? 'active' : ''}`}
-              onClick={() => toggleTab('scenes')}
-            >
-              <span className="tab-icon">💾</span>
-              <span className="tab-label">SCENES</span>
-            </button>
-          </nav>
-
-          {/* TAB 1: DRAW & TAB 2: LASER (Maximized Immersive Canvas) */}
-          {(tab === 'draw' || tab === 'laser') && (
-            <div className="drawing-mode-container">
-              {/* Secondary Tools Header */}
-              <div className="tool-row">
-                {tab === 'draw' && (
-                  <>
-                    <button
-                      className={`btn-pill ${tool === 'pen' ? 'selected' : ''}`}
-                      onClick={() => setTool('pen')}
-                    >
-                      Light Pen
-                    </button>
-                    <button
-                      className={`btn-pill ${tool === 'eraser' ? 'selected' : ''}`}
-                      onClick={() => setTool('eraser')}
-                    >
-                      Cutout (Eraser)
-                    </button>
-                  </>
-                )}
-
-                {tab === 'laser' && (
-                  <div className="decay-selector">
-                    <span className="decay-label">DECAY:</span>
-                    {[1.0, 2.5, 5.0].map((sec) => (
-                      <button
-                        key={sec}
-                        className={`btn-pill ${laserDecay === sec ? 'selected' : ''}`}
-                        onClick={() => setLaserDecay(sec)}
-                      >
-                        {sec}s
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <span className="tool-spacer" />
+          {/* Palette & Tools Toolbar */}
+          <div className="remote-palette-bar">
+            <div className="color-swatches">
+              {LIGHT_PALETTE.slice(0, 5).map((c) => (
                 <button
-                  className="btn-pill"
-                  onClick={() => socketRef.current?.emit('stroke:undo')}
-                >
-                  Undo
-                </button>
-                <button
-                  className="btn-pill btn-danger"
-                  onClick={() => socketRef.current?.emit('board:clear')}
-                >
-                  Clear
-                </button>
-              </div>
-
-              {/* Light Color Swatches */}
-              <div className="swatches">
-                {LIGHT_PALETTE.map((c) => (
-                  <button
-                    key={c}
-                    aria-label={`Light color ${c}`}
-                    className={`swatch-btn ${color === c && tool === 'pen' ? 'chosen' : ''}`}
-                    style={{ background: c, boxShadow: color === c ? `0 0 14px ${c}` : undefined }}
-                    onClick={() => {
-                      setColor(c);
-                      setTool('pen');
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Maximized Full-Height Mobile Canvas (Clean Optical Black) */}
-              <div className="phone-canvas-wrap immersive">
-                <canvas
-                  ref={canvasRef}
-                  className="phone-canvas"
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerUp}
-                  onPointerCancel={handlePointerUp}
+                  key={c}
+                  className={`color-btn ${color === c && tool === 'pen' ? 'active' : ''}`}
+                  style={{ backgroundColor: c }}
+                  onClick={() => {
+                    setColor(c);
+                    setTool('pen');
+                  }}
                 />
-              </div>
-
-              {/* Compact Beam Width Slider */}
-              <div className="brush-row">
-                <span>BEAM WIDTH</span>
-                <input
-                  type="range"
-                  min="0.003"
-                  max="0.035"
-                  step="0.001"
-                  value={width}
-                  onChange={(e) => setWidth(Number(e.target.value))}
-                />
-                <span className="value-label">{Math.round(width * 1000)}</span>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: TORCH / SPOTLIGHT BEAM */}
-          {tab === 'torch' && (
-            <div className="torch-container">
-              <div className="torch-instructions">
-                Touch & drag below to cast a moving light beam on the wall.
-              </div>
-
-              {/* Virtual Spotlight Trackpad */}
-              <div
-                ref={torchPadRef}
-                className="torch-pad"
-                onPointerDown={(e) => handleTorchPointer(e)}
-                onPointerMove={(e) => handleTorchPointer(e)}
-                onPointerUp={(e) => handleTorchPointer(e, true)}
-                onPointerCancel={(e) => handleTorchPointer(e, true)}
+              ))}
+              <button
+                className={`tool-btn ${tool === 'eraser' ? 'active' : ''}`}
+                onClick={() => setTool(tool === 'eraser' ? 'pen' : 'eraser')}
               >
-                {torchPos.active && (
-                  <div
-                    className="torch-reticle"
-                    style={{
-                      left: `${torchPos.x * 100}%`,
-                      top: `${torchPos.y * 100}%`,
-                      borderColor: torchColor,
-                      boxShadow: `0 0 26px ${torchColor}`
-                    }}
-                  />
-                )}
-                {!torchPos.active && <div className="torch-pad-idle">Drag your finger here</div>}
-              </div>
-
-              {/* Torch Settings */}
-              <div className="torch-controls">
-                <div className="torch-slider-row">
-                  <span>BEAM RADIUS</span>
-                  <input
-                    type="range"
-                    min="0.04"
-                    max="0.35"
-                    step="0.01"
-                    value={torchRadius}
-                    onChange={(e) => setTorchRadius(Number(e.target.value))}
-                  />
-                </div>
-
-                <div className="swatches torch-swatches">
-                  {['#ffffff', '#ffaa00', '#00f0ff', '#ff007f', '#39ff14'].map((c) => (
-                    <button
-                      key={c}
-                      className={`swatch-btn ${torchColor === c ? 'chosen' : ''}`}
-                      style={{ background: c, boxShadow: torchColor === c ? `0 0 12px ${c}` : undefined }}
-                      onClick={() => setTorchColor(c)}
-                    />
-                  ))}
-                </div>
-              </div>
+                ⌫
+              </button>
             </div>
-          )}
 
-          {/* TAB 4: WARP — DIRECT TOUCH-DRAGGABLE KEYSTONE */}
-          {tab === 'warp' && (
-            <div className="warp-container">
-              <div className="warp-banner">
-                Touch and drag any corner directly on the screen to align to your wall.
-              </div>
-
-              {/* Interactive Mobile Touchpad: Touch & Drag Corners Directly */}
-              <div className="warp-touchpad-container">
-                <canvas
-                  ref={warpPadRef}
-                  className="warp-touchpad"
-                  onPointerDown={handleWarpTouchDown}
-                  onPointerMove={handleWarpTouchMove}
-                  onPointerUp={handleWarpTouchUp}
-                  onPointerCancel={handleWarpTouchUp}
-                />
-              </div>
-
-              {/* Corner Selector Buttons */}
-              <div className="corner-selector-grid">
-                <button
-                  className={`corner-btn ${activeCorner === 'tl' ? 'active' : ''}`}
-                  onClick={() => setActiveCorner('tl')}
-                >
-                  <span className="corner-tag">1 · TOP-LEFT</span>
-                  <span className="corner-coords">
-                    {quad.tl.x.toFixed(2)}, {quad.tl.y.toFixed(2)}
-                  </span>
-                </button>
-                <button
-                  className={`corner-btn ${activeCorner === 'tr' ? 'active' : ''}`}
-                  onClick={() => setActiveCorner('tr')}
-                >
-                  <span className="corner-tag">2 · TOP-RIGHT</span>
-                  <span className="corner-coords">
-                    {quad.tr.x.toFixed(2)}, {quad.tr.y.toFixed(2)}
-                  </span>
-                </button>
-                <button
-                  className={`corner-btn ${activeCorner === 'bl' ? 'active' : ''}`}
-                  onClick={() => setActiveCorner('bl')}
-                >
-                  <span className="corner-tag">4 · BOT-LEFT</span>
-                  <span className="corner-coords">
-                    {quad.bl.x.toFixed(2)}, {quad.bl.y.toFixed(2)}
-                  </span>
-                </button>
-                <button
-                  className={`corner-btn ${activeCorner === 'br' ? 'active' : ''}`}
-                  onClick={() => setActiveCorner('br')}
-                >
-                  <span className="corner-tag">3 · BOT-RIGHT</span>
-                  <span className="corner-coords">
-                    {quad.br.x.toFixed(2)}, {quad.br.y.toFixed(2)}
-                  </span>
-                </button>
-              </div>
-
-              {/* Tactile D-Pad for Micro-Nudges */}
-              <div className="dpad-box">
-                <button className="dpad-btn up" onClick={() => nudgeCorner(0, -warpStep)}>
-                  ▲
-                </button>
-                <div className="dpad-mid-row">
-                  <button className="dpad-btn left" onClick={() => nudgeCorner(-warpStep, 0)}>
-                    ◀
-                  </button>
-                  <div className="dpad-center-label">
-                    <span className="active-corner-label">{activeCorner.toUpperCase()}</span>
-                  </div>
-                  <button className="dpad-btn right" onClick={() => nudgeCorner(warpStep, 0)}>
-                    ▶
-                  </button>
-                </div>
-                <button className="dpad-btn down" onClick={() => nudgeCorner(0, warpStep)}>
-                  ▼
-                </button>
-              </div>
-
-              {/* Step Size & Reset */}
-              <div className="warp-options-row">
-                <div className="step-toggle">
-                  <span className="step-label">NUDGE:</span>
-                  <button
-                    className={`btn-pill ${warpStep === 0.005 ? 'selected' : ''}`}
-                    onClick={() => setWarpStep(0.005)}
-                  >
-                    Fine
-                  </button>
-                  <button
-                    className={`btn-pill ${warpStep === 0.02 ? 'selected' : ''}`}
-                    onClick={() => setWarpStep(0.02)}
-                  >
-                    Coarse
-                  </button>
-                </div>
-                <button className="btn-pill btn-danger" onClick={resetQuad}>
-                  Reset Quad
-                </button>
-              </div>
+            <div className="action-buttons-row">
+              <button
+                className={`laser-pill ${laserDecay > 0 ? 'active' : ''}`}
+                onClick={() => setLaserDecay(laserDecay > 0 ? 0 : 2.5)}
+              >
+                {laserDecay > 0 ? 'LASER (2.5s)' : 'PERSISTENT'}
+              </button>
+              <button className="btn-undo-pill" onClick={() => socketRef.current?.emit('stroke:undo')}>
+                UNDO
+              </button>
+              <button className="btn-clear-pill" onClick={() => socketRef.current?.emit('board:clear')}>
+                CLEAR
+              </button>
             </div>
-          )}
-
-          {/* TAB 5: 3D CUBES & TRACING SHAPES (Phase 5) */}
-          {tab === 'shapes' && (
-            <div className="shapes-container">
-              <div className="warp-banner">
-                Project 3D wireframe cubes and shapes to map physical boxes and objects.
-              </div>
-
-              <div className="shape-actions-row">
-                <button
-                  className="btn-pill selected"
-                  onClick={() => addOrUpdateCube({})}
-                >
-                  + Add 3D Cube
-                </button>
-                <button
-                  className="btn-pill"
-                  onClick={() => {
-                    const mask: MappingShape = {
-                      id: 'mask_' + Date.now().toString(36),
-                      type: 'mask',
-                      points: [
-                        { x: 0.35, y: 0.35 },
-                        { x: 0.65, y: 0.35 },
-                        { x: 0.65, y: 0.65 },
-                        { x: 0.35, y: 0.65 }
-                      ]
-                    };
-                    socketRef.current?.emit('shape:add', mask);
-                  }}
-                >
-                  + Blackout Cutout Mask
-                </button>
-                <button
-                  className="btn-pill btn-danger"
-                  onClick={() => socketRef.current?.emit('shapes:clear')}
-                >
-                  Clear Shapes
-                </button>
-              </div>
-
-              {/* 3D Orbit Trackpad: Drag finger to rotate cube in 3D space */}
-              {activeCube && (
-                <div className="cube-editor-box">
-                  <span className="editor-title">3D CUBE ORBIT & ROTATION</span>
-                  <div
-                    ref={orbitPadRef}
-                    className="orbit-trackpad"
-                    onPointerDown={handleOrbitPointerDown}
-                    onPointerMove={handleOrbitPointerMove}
-                    onPointerUp={handleOrbitPointerUp}
-                    onPointerCancel={handleOrbitPointerUp}
-                  >
-                    <div className="orbit-hint">
-                      Touch & drag here to rotate 3D cube onto your physical box
-                    </div>
-                    <div className="orbit-readout">
-                      RotX: {activeCube.rotX}° · RotY: {activeCube.rotY}°
-                    </div>
-                  </div>
-
-                  <div className="cube-controls-grid">
-                    <div className="control-item">
-                      <span>CUBE SIZE</span>
-                      <input
-                        type="range"
-                        min="0.08"
-                        max="0.45"
-                        step="0.01"
-                        value={activeCube.size}
-                        onChange={(e) => addOrUpdateCube({ size: Number(e.target.value) })}
-                      />
-                    </div>
-                    <div className="control-item">
-                      <span>POS X</span>
-                      <input
-                        type="range"
-                        min="0.1"
-                        max="0.9"
-                        step="0.01"
-                        value={activeCube.x}
-                        onChange={(e) => addOrUpdateCube({ x: Number(e.target.value) })}
-                      />
-                    </div>
-                    <div className="control-item">
-                      <span>POS Y</span>
-                      <input
-                        type="range"
-                        min="0.1"
-                        max="0.9"
-                        step="0.01"
-                        value={activeCube.y}
-                        onChange={(e) => addOrUpdateCube({ y: Number(e.target.value) })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="swatches">
-                    {LIGHT_PALETTE.map((c) => (
-                      <button
-                        key={c}
-                        className={`swatch-btn ${activeCube.color === c ? 'chosen' : ''}`}
-                        style={{ background: c, boxShadow: activeCube.color === c ? `0 0 12px ${c}` : undefined }}
-                        onClick={() => addOrUpdateCube({ color: c })}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 6: SCENE PRESETS & PERSISTENCE (Phase 6) */}
-          {tab === 'scenes' && (
-            <div className="scenes-container">
-              <div className="warp-banner">
-                Save and recall your projection setups, wall mappings, and light shows.
-              </div>
-
-              {/* Save Current Scene */}
-              <div className="save-scene-box">
-                <input
-                  type="text"
-                  placeholder="Scene name (e.g. Living Room Box Setup)"
-                  value={newSceneName}
-                  onChange={(e) => setNewSceneName(e.target.value)}
-                  className="scene-input"
-                />
-                <button
-                  className="btn-pill selected"
-                  disabled={!newSceneName.trim()}
-                  onClick={() => {
-                    socketRef.current?.emit('scene:save', { name: newSceneName.trim() });
-                    setNewSceneName('');
-                  }}
-                >
-                  Save Scene
-                </button>
-              </div>
-
-              {/* Scenes List */}
-              <div className="scenes-list">
-                {scenes.map((sc) => (
-                  <div key={sc.id} className="scene-card">
-                    <div className="scene-info">
-                      <span className="scene-name">{sc.name}</span>
-                      <span className="scene-meta">
-                        {sc.shapes?.length || 0} shapes · {sc.strokes?.length || 0} strokes
-                      </span>
-                    </div>
-                    <button
-                      className="btn-pill selected"
-                      onClick={() => socketRef.current?.emit('scene:load', sc.id)}
-                    >
-                      Load
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
+          </div>
+        </div>
       )}
-    </main>
+
+      {/* ── TAB 2: KEYSTONE / WARP ── */}
+      {tab === 'warp' && (
+        <div className="remote-warp-view">
+          <div className="warp-pad-container">
+            <canvas
+              ref={warpPadRef}
+              className="warp-touch-pad"
+              onTouchStart={handleWarpTouchStart}
+              onTouchMove={handleWarpTouchMove}
+              onTouchEnd={handleWarpTouchEnd}
+            />
+          </div>
+
+          {/* Precision D-Pad Nudge Controls */}
+          <div className="warp-controls-panel">
+            <div className="corner-selector-row">
+              {(['tl', 'tr', 'br', 'bl'] as const).map((c) => (
+                <button
+                  key={c}
+                  className={`corner-tab-btn ${activeCorner === c ? 'active' : ''}`}
+                  onClick={() => setActiveCorner(c)}
+                >
+                  {c.toUpperCase()}
+                </button>
+              ))}
+            </div>
+
+            <div className="dpad-grid">
+              <button className="dpad-btn up" onClick={() => handleCornerNudge(0, -1)}>
+                ▲
+              </button>
+              <div className="dpad-middle">
+                <button className="dpad-btn left" onClick={() => handleCornerNudge(-1, 0)}>
+                  ◀
+                </button>
+                <div className="dpad-center">{activeCorner.toUpperCase()}</div>
+                <button className="dpad-btn right" onClick={() => handleCornerNudge(1, 0)}>
+                  ▶
+                </button>
+              </div>
+              <button className="dpad-btn down" onClick={() => handleCornerNudge(0, 1)}>
+                ▼
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 3: MEDIA & ANIMATION ── */}
+      {tab === 'media' && (
+        <div className="remote-media-view">
+          <div className="media-card">
+            <h3>GRADIENT THEMES</h3>
+            <div className="preset-grid">
+              <button
+                className="preset-theme-btn"
+                style={{ background: 'linear-gradient(45deg, #00f0ff, #ff007f)' }}
+                onClick={() => handleSetGradientColors('#00f0ff', '#ff007f')}
+              >
+                CYBERPUNK
+              </button>
+              <button
+                className="preset-theme-btn"
+                style={{ background: 'linear-gradient(45deg, #ffaa00, #ff0033)' }}
+                onClick={() => handleSetGradientColors('#ffaa00', '#ff0033')}
+              >
+                SOLAR
+              </button>
+              <button
+                className="preset-theme-btn"
+                style={{ background: 'linear-gradient(45deg, #00ff66, #003311)' }}
+                onClick={() => handleSetGradientColors('#00ff66', '#003311')}
+              >
+                MATRIX
+              </button>
+              <button
+                className="preset-theme-btn"
+                style={{ background: 'linear-gradient(45deg, #ffffff, #555555)', color: '#000' }}
+                onClick={() => handleSetGradientColors('#ffffff', '#333333')}
+              >
+                MONO
+              </button>
+            </div>
+          </div>
+
+          <div className="media-card">
+            <h3>ANIMATION CONTROLS</h3>
+            <button
+              className={`btn-media-toggle ${
+                activeSurface?.animations?.some((a) => a.targetProperty === 'source.config.angle' && a.enabled)
+                  ? 'active'
+                  : ''
+              }`}
+              onClick={handleToggleGradientAnim}
+            >
+              {activeSurface?.animations?.some((a) => a.targetProperty === 'source.config.angle' && a.enabled)
+                ? 'GRADIENT ROTATING (60 FPS)'
+                : 'START ROTATION ANIMATION'}
+            </button>
+          </div>
+
+          <div className="media-card">
+            <h3>OPTICAL TEST PATTERN</h3>
+            <button
+              className={`btn-media-toggle ${isCalibration ? 'active-grid' : ''}`}
+              onClick={() => socketRef.current?.emit('calibration:toggle')}
+            >
+              {isCalibration ? 'TEST GRID: ON' : 'SHOW CALIBRATION GRID'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
-createRoot(document.getElementById('root')!).render(<Remote />);
+const container = document.getElementById('remote-root');
+if (container) {
+  const root = createRoot(container);
+  root.render(<Remote />);
+}

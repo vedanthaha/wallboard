@@ -1,25 +1,22 @@
 import { io } from 'socket.io-client';
+import { WallboardWebGLCompositor } from '../shared/surfaceRenderer';
 import {
-  drawStroke,
-  drawCalibrationGrid,
-  drawSpotlightBeam,
-  drawMappingShapes,
-  DEFAULT_QUAD,
-  Quad,
-  Stroke,
-  Spotlight,
-  MappingShape
-} from '../shared/drawing';
+  Surface,
+  MediaSource,
+  DrawingStroke,
+  CornerPins
+} from '../shared/protocol';
 
 const canvas = document.getElementById('output-canvas') as HTMLCanvasElement;
-const strokes: Stroke[] = [];
-let shapes: MappingShape[] = [];
-let currentQuad: Quad = { ...DEFAULT_QUAD };
-let isCalibrationActive = false;
-let isBlackoutActive = false;
-let activeSpotlight: Spotlight | null = null;
+let compositor: WallboardWebGLCompositor | null = null;
 
-// Connect to local server for real-time stroke and projection synchronization
+let surfaces: Surface[] = [];
+let sources: Record<string, MediaSource> = {};
+const strokes: DrawingStroke[] = [];
+let isMasterBlackout = false;
+let isCalibrationActive = false;
+
+// Connect to server
 const socket = io({ transports: ['websocket', 'polling'] });
 
 function joinSession() {
@@ -29,10 +26,11 @@ function joinSession() {
       if (session?.code) {
         socket.emit('join', { code: session.code, role: 'display' });
       }
-      if (session?.quad) currentQuad = session.quad;
-      if (session?.shapes) shapes = session.shapes;
+      if (Array.isArray(session?.surfaces)) surfaces = session.surfaces;
+      if (session?.sources) sources = session.sources;
+      if (Array.isArray(session?.strokes)) strokes.push(...session.strokes);
+      if (session?.blackout !== undefined) isMasterBlackout = session.blackout;
       if (session?.calibration !== undefined) isCalibrationActive = session.calibration;
-      if (session?.blackout !== undefined) isBlackoutActive = session.blackout;
     })
     .catch(() => {});
 }
@@ -40,18 +38,44 @@ function joinSession() {
 socket.on('connect', joinSession);
 joinSession();
 
-socket.on('board:init', (initStrokes: Stroke[]) => {
-  strokes.length = 0;
-  if (Array.isArray(initStrokes)) {
-    const now = Date.now();
-    for (const s of initStrokes) {
-      if (!s.createdAt) s.createdAt = now;
-      strokes.push(s);
-    }
+// State synchronization
+socket.on('state:init', (state) => {
+  if (Array.isArray(state?.surfaces)) surfaces = state.surfaces;
+  if (state?.sources) sources = state.sources;
+  if (Array.isArray(state?.strokes)) {
+    strokes.length = 0;
+    strokes.push(...state.strokes);
+  }
+  if (state?.masterBlackout !== undefined) isMasterBlackout = state.masterBlackout;
+  if (state?.calibrationActive !== undefined) isCalibrationActive = state.calibrationActive;
+});
+
+socket.on('surfaces:sync', (data) => {
+  if (Array.isArray(data?.surfaces)) surfaces = data.surfaces;
+});
+
+socket.on('surface:update', (updated: Surface) => {
+  const idx = surfaces.findIndex((s) => s.id === updated.id);
+  if (idx >= 0) surfaces[idx] = updated;
+  else surfaces.push(updated);
+});
+
+socket.on('surface:corners', ({ surfaceId, corners }: { surfaceId: string; corners: CornerPins }) => {
+  const surf = surfaces.find((s) => s.id === surfaceId);
+  if (surf) {
+    surf.geometry.corners = corners;
   }
 });
 
-socket.on('stroke:add', (stroke: Stroke) => {
+socket.on('source:update', (source: MediaSource) => {
+  sources[source.id] = source;
+});
+
+socket.on('source:sync', (allSources: Record<string, MediaSource>) => {
+  sources = allSources;
+});
+
+socket.on('stroke:add', (stroke: DrawingStroke) => {
   if (!stroke.createdAt) stroke.createdAt = Date.now();
   const index = strokes.findIndex((item) => item.id === stroke.id);
   if (index >= 0) strokes[index] = stroke;
@@ -67,27 +91,33 @@ socket.on('board:clear', () => {
   strokes.length = 0;
 });
 
-socket.on('warp:update', (quad: Quad) => {
-  if (quad) currentQuad = quad;
-});
-
-socket.on('shapes:update', (updatedShapes: MappingShape[]) => {
-  if (Array.isArray(updatedShapes)) shapes = updatedShapes;
+socket.on('blackout:update', (active: boolean) => {
+  isMasterBlackout = Boolean(active);
 });
 
 socket.on('calibration:update', (active: boolean) => {
   isCalibrationActive = Boolean(active);
 });
 
-socket.on('blackout:update', (active: boolean) => {
-  isBlackoutActive = Boolean(active);
+// Backward-compatibility events
+socket.on('warp:update', (quad: CornerPins) => {
+  if (surfaces[0]) {
+    surfaces[0].geometry.corners = quad;
+  }
 });
 
-socket.on('spotlight:update', (spotlight: Spotlight | null) => {
-  activeSpotlight = spotlight;
+socket.on('board:init', (initStrokes: DrawingStroke[]) => {
+  strokes.length = 0;
+  if (Array.isArray(initStrokes)) {
+    const now = Date.now();
+    for (const s of initStrokes) {
+      if (!s.createdAt) s.createdAt = now;
+      strokes.push(s);
+    }
+  }
 });
 
-// Continuous high-FPS render loop for optical decay, 3D cubes, spotlights, and warping
+// Render Loop
 function renderLoop() {
   requestAnimationFrame(renderLoop);
   if (!canvas) return;
@@ -102,93 +132,35 @@ function renderLoop() {
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
-  }
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  // Blackout Shutter: 0 light emitted from projector lamp
-  if (isBlackoutActive) {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, rect.width, rect.height);
-    return;
-  }
-
-  // Pure optical black background (0 light)
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, rect.width, rect.height);
-
-  const now = Date.now();
-
-  // 1. Render active geometric mapping shapes (3D Cubes, Circles, Polygon Masks)
-  if (shapes.length > 0) {
-    drawMappingShapes(ctx, shapes, rect.width, rect.height, currentQuad, isCalibrationActive);
-  }
-
-  // 2. Render light strokes with laser decay handling
-  for (let i = strokes.length - 1; i >= 0; i--) {
-    const stroke = strokes[i];
-    let alpha = 1;
-
-    if (stroke.decaySeconds && stroke.decaySeconds > 0) {
-      const created = stroke.createdAt || now;
-      const ageMs = now - created;
-      const totalMs = stroke.decaySeconds * 1000;
-      if (ageMs >= totalMs) {
-        strokes.splice(i, 1);
-        continue;
-      }
-      alpha = Math.max(0, 1 - ageMs / totalMs);
+    if (compositor) {
+      compositor.resize(w, h);
     }
-
-    drawStroke(ctx, stroke, rect.width, rect.height, true, currentQuad, alpha);
   }
 
-  // 3. Render moving virtual spotlight beam
-  if (activeSpotlight && activeSpotlight.active) {
-    drawSpotlightBeam(
-      ctx,
-      { x: activeSpotlight.x, y: activeSpotlight.y },
-      activeSpotlight.radius,
-      activeSpotlight.color,
-      rect.width,
-      rect.height,
-      currentQuad
-    );
+  if (!compositor) {
+    compositor = new WallboardWebGLCompositor(canvas);
+    compositor.resize(w, h);
   }
 
-  // 4. Render projection calibration test pattern (4-corner keystone alignment)
-  if (isCalibrationActive) {
-    drawCalibrationGrid(ctx, rect.width, rect.height, currentQuad);
-  }
+  compositor.render(surfaces, sources, strokes, isMasterBlackout, isCalibrationActive);
 }
 
 requestAnimationFrame(renderLoop);
 
-// Interactive hotkeys & gestures for projector calibration
+// Projector operator shortcuts
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'f' || e.key === 'F' || e.key === 'F11') {
+  if (e.key === 'F11') {
     e.preventDefault();
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
     } else {
       document.exitFullscreen().catch(() => {});
     }
-  } else if (e.key === 'c' || e.key === 'C') {
-    socket.emit('calibration:toggle');
   } else if (e.key === 'b' || e.key === 'B') {
     socket.emit('blackout:toggle');
+  } else if (e.key === 'c' || e.key === 'C') {
+    socket.emit('calibration:toggle');
   } else if (e.key === 'Escape' && document.fullscreenElement) {
-    document.exitFullscreen().catch(() => {});
-  }
-});
-
-window.addEventListener('dblclick', () => {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {});
-  } else {
     document.exitFullscreen().catch(() => {});
   }
 });

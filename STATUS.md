@@ -1,49 +1,51 @@
 # Verification Report
 
 Date: 2026-11-24
-Version: 0.3.0 (Light Manipulation & Projection Mapping Engine)
+Version: 0.4.0 (3D Cube Tracing, Touch Keystone Warping, Radiant Bloom & Scenes)
 
 ## Acceptance Test Results
 
 ### 1. Build & Compilation Verification
-- `node --test server/protocol.test.js`: **PASSED** (5 tests passed, 0 failed)
+- `node --test server/protocol.test.js`: **PASSED** (6 tests passed, 0 failed)
   - Normalized point coordinate bounds validation (0..1)
   - Point timestamp (`t`) acceptance for decay calculation
   - Valid stroke schema verification with optional `decaySeconds`
   - Malformed stroke rejection
   - Projection mapping Quad schema validation (`isValidQuad`)
   - Virtual Spotlight descriptor validation (`isValidSpotlight`)
+  - 3D Cube and mapping shape validation (`isValidShape`, `isValidCube`, `isValidMask`)
 - `tsc`: **PASSED** (0 TypeScript errors)
-- `vite build`: **PASSED** (all 4 HTML entry points compiled and bundled):
-  - `dist/studio.html`: Desktop Studio on primary display
-  - `dist/output.html`: Dedicated Projector Output on secondary display
+- `vite build`: **PASSED** (all 4 HTML entry points compiled and bundled in 7.8s):
+  - `dist/output.html`: Dedicated Projector Output
+  - `dist/studio.html`: Desktop Studio on laptop
   - `dist/index.html`: Android Remote web entry
   - `dist/remote.html`: Mobile Remote fallback route
 
-### 2. MadMapper-Grade Light Manipulation Engine
-- **Pitch-Black Optical Canvas (`#000000`)**:
-  - The projector emits 0 light from the lamp on black pixels.
-  - Overlapping beams combine using `globalCompositeOperation = 'screen'` (additive optical light mixing).
-  - High-power laser core rendering with white-hot center line.
-- **Dynamic Laser Trail Decay**:
-  - Continuous `requestAnimationFrame` render loop in `src/output/main.tsx`.
-  - Configurable decay presets: `1.0s` (Quick flick), `2.5s` (Flowing ribbon), `5.0s` (Phosphor glow).
-  - Points fade smoothly to 0 alpha and are automatically pruned from memory.
-- **Virtual Spotlight / Torch Beam**:
-  - Phone acts as a virtual directional flashlight.
-  - Touch-dragging emits `spotlight:move` with `{ x, y, radius, color, active }`.
-  - Output window renders a feathered radial light beam on the physical wall.
-- **Projector Shutter / Blackout**:
-  - Instant optical blackout (0 light emitted) accessible via phone, studio, and keyboard shortcut (`B`).
+### 2. Upgraded Mobile Remote Experience
+- **Maximized Immersive Canvas Viewport**:
+  - Expanded canvas drawing area to full height (`60dvh`, up to 680px).
+  - Distracting dot-grid pattern removed — now renders a clean, pitch-black optical canvas (`#05070a`).
+- **Direct Touch-Draggable Keystone**:
+  - Users can now **touch and drag any of the 4 corners (`TL`, `TR`, `BR`, `BL`) directly on their phone screen**.
+  - As their thumb moves, the projector output warps dynamically in real time.
+  - Precision D-Pad retained below for 0.005 micro-nudges.
 
-### 3. Projection Mapping & 4-Corner Keystone Warping
-- **Bilinear Quad Warping Math (`warpPoint`)**:
-  - Dynamically warps all strokes, test patterns, spotlights, and laser trails to match any tilted or angled projector beam.
-- **Desktop Studio Interactive Quad Warper**:
-  - Click & drag corner pins (TL, TR, BR, BL) directly on the laptop live preview canvas.
-  - Preset aspect ratios: 16:9, 16:10, 4:3, Full bounds, Reset.
-- **Android Remote Calibrate Tab**:
-  - Stand in front of the wall and nudge corners with a tactile 4-way D-Pad (Up, Down, Left, Right).
-  - Fine (0.005) and Coarse (0.02) step size toggle.
-- **Calibration Test Grid**:
-  - High-contrast neon cyan pattern with crosshairs, 4x4 perspective grid, diagonal guides, and numbered corner pins.
+### 3. Radiant Multi-Pass Optical Light Bloom
+- Upgraded `drawStroke` with true **3-pass optical emission**:
+  - **Pass 1 (Outer Bloom)**: Wide diffuse atmospheric halo (`shadowBlur: 20-35px`, additive `lighter`).
+  - **Pass 2 (Inner Corona)**: Saturated neon color ring (`shadowBlur: 10-15px`).
+  - **Pass 3 (Laser Core)**: Intense pure `#ffffff` piercing white-hot center line.
+- When beams overlap on the physical wall, photons add together (`globalCompositeOperation = 'lighter'`), creating genuine optical lighting effects.
+
+### 4. 3D Cube Wireframe & Object Tracing (Phase 5)
+- **3D Cube Wireframe Engine**:
+  - 8 vertices with 3D rotation matrix around X, Y, Z axes, projected into 2D normalized coordinates and warped through the keystone quad.
+  - 12 glowing neon edges with vertex corner dots for alignment.
+  - **Touch 3D Orbit Pad on Mobile**: Dragging your thumb on the phone rotates the 3D cube in real time to match physical cardboard boxes, cubes, or surfaces in your room!
+- **Polygon Blackout Mask**:
+  - Define custom cutout polygons that fill with pure `#000000` to cut off light over physical wall obstacles (e.g., hanging TV, speaker, clock, or picture frame).
+- **Target Rings**: Concentric glowing circles for circular target alignment.
+
+### 5. Scene Presets & Persistence (Phase 6)
+- **Built-in Presets**: *Clean Light Canvas*, *3D Cube Mapping Stage*, *Laser Phosphor Trails*, *Precision Calibration*.
+- **Save Custom Scenes**: Name and save custom setups directly from mobile or laptop into persistent disk storage (`.scenes.json`).

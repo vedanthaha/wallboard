@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isValidPoint, isValidStroke, isValidQuad, isValidSpotlight } from './protocol.js';
+import { isValidPoint, isValidStroke, isValidQuad, isValidSpotlight, isValidShape } from './protocol.js';
 
 test('accepts normalized points', () => {
   assert.equal(isValidPoint({ x: 0, y: 1 }), true);
@@ -46,4 +46,16 @@ test('validates spotlight beam descriptor', () => {
   assert.equal(isValidSpotlight({ x: 0.5, y: 0.5, radius: 0.1, color: '#ffffff', active: true }), true);
   assert.equal(isValidSpotlight(null), true);
   assert.equal(isValidSpotlight({ x: 2, y: 0.5, radius: 0.1, color: '#ffffff', active: true }), false);
+});
+
+test('validates 3D cube and mapping shapes', () => {
+  assert.equal(
+    isValidShape({ id: 'cube-1', type: 'cube', x: 0.5, y: 0.5, size: 0.2, rotX: 30, rotY: 45, rotZ: 0, color: '#00ffff', lineWidth: 2 }),
+    true
+  );
+  assert.equal(
+    isValidShape({ id: 'mask-1', type: 'mask', points: [{ x: 0.1, y: 0.1 }, { x: 0.3, y: 0.1 }, { x: 0.2, y: 0.3 }] }),
+    true
+  );
+  assert.equal(isValidShape({ id: 'bad', type: 'cube', size: -1 }), false);
 });

@@ -18,7 +18,8 @@ Status meanings: `DONE` = implemented and verified in this workspace; `IN PROGRE
 - [x] Mobile pointer/touch event handling with touch-action isolation — implemented (`src/remote/main.tsx`)
 - [x] Normalized 2D coordinate system across different aspect ratios — implemented
 - [x] Smooth curve interpolation using quadratic Bezier midpoint smoothing — implemented (`src/shared/drawing.ts`)
-- [x] Reconnection and session state synchronization — implemented
+- [x] Maximized immersive canvas viewport (`60dvh`) without distracting background dots — implemented (`src/style.css`)
+- [x] Global remote access over mobile data via Ngrok tunnel — verified
 
 ## Phase 3: Brushes, Colors, Eraser, Undo/Redo & Light Modes
 - [x] High-luminosity projection light palette (White Beam, Cyan, Neon Green, Amber, UV Magenta, Crimson, Violet) — implemented
@@ -27,21 +28,29 @@ Status meanings: `DONE` = implemented and verified in this workspace; `IN PROGRE
 - [x] Beam width slider with normalized thickness scaling — implemented
 
 ## Phase 4: Glow, Gradients, Brightness & Light Effects
-- [x] Real-time multi-layer beam glow bloom (`shadowBlur` + white-hot core) — implemented
+- [x] Multi-pass optical light bloom (Pass 1: wide diffuse halo, Pass 2: saturated corona, Pass 3: white-hot laser core) — implemented (`src/shared/drawing.ts`)
 - [x] Optical additive light blending (`screen` / `lighter`) — implemented
 - [x] Dynamic laser trail decay with continuous rAF animation loop (1.0s, 2.5s, 5.0s presets) — implemented
 - [x] Virtual moving spotlight / torch beam mode with radial feathering and color selection — implemented
 - [x] Projector shutter / Blackout mode (instant 0 light cutoff) — implemented
 
-## Phase 5: Projection Mapping, Corner Pinning & Calibration
+## Phase 5: Projection Mapping, Corner Pinning, 3D Cubes & Masks
 - [x] 4-corner perspective quad warping / keystone calibration math (`warpPoint`) — implemented
-- [x] Real-time keystone synchronization over Socket.IO (`warp:update`) — implemented
-- [x] Projection mapping calibration test pattern with crosshairs and numbered corner targets — implemented
+- [x] Direct touch-dragging of keystone corners (`TL`, `TR`, `BR`, `BL`) on mobile touchpad — implemented (`src/remote/main.tsx`)
+- [x] Precision 4-way D-Pad micro-nudging on mobile remote — implemented
 - [x] Interactive drag-handle Quad Warper directly on Desktop Studio canvas — implemented
-- [x] Tactile 4-way D-Pad keystone calibration console on Android Phone Remote — implemented
-- [x] Aspect ratio presets (16:9, 16:10, 4:3, Full bounds) — implemented
+- [x] Projection mapping calibration test pattern with crosshairs and numbered corner targets — implemented
+- [x] 3D Cube wireframe engine with 3D rotation matrix and touch orbit pad for physical box tracing — implemented (`src/shared/drawing.ts`, `src/remote/main.tsx`)
+- [x] Polygon cutout mask for blacking out physical objects (TV, picture frame, door) — implemented
+- [x] Concentric glowing target rings — implemented
+
+## Phase 6: Scenes, Presets & Persistence
+- [x] Built-in scene presets (Clean Light Canvas, 3D Cube Mapping Stage, etc.) — implemented
+- [x] Custom scene saving from mobile remote or desktop studio — implemented (`server/index.js`, `.scenes.json`)
+- [x] Instant scene switching with full state restoration (quad, strokes, shapes, settings) — implemented
+- [x] Persistent scene storage on disk (`.scenes.json`) — implemented
 
 ## Verification
-- [x] `node --test server/protocol.test.js` — 5 passed, 0 failed
+- [x] `node --test server/protocol.test.js` — 6 passed, 0 failed
 - [x] `npm install` — completed successfully
 - [x] `npm run build` (`tsc && vite build`) — completed successfully, generated studio, output, index, remote bundles

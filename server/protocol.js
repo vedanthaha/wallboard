@@ -59,3 +59,38 @@ export function isValidSpotlight(spotlight) {
     typeof spotlight.active === 'boolean'
   );
 }
+
+export function isValidCube(cube) {
+  return Boolean(
+    cube &&
+    cube.type === 'cube' &&
+    typeof cube.id === 'string' &&
+    Number.isFinite(cube.x) &&
+    Number.isFinite(cube.y) &&
+    Number.isFinite(cube.size) &&
+    cube.size > 0 &&
+    typeof cube.color === 'string'
+  );
+}
+
+export function isValidShape(shape) {
+  if (!shape || typeof shape !== 'object') return false;
+  if (shape.type === 'cube') return isValidCube(shape);
+  if (shape.type === 'mask') {
+    return Boolean(
+      typeof shape.id === 'string' &&
+      Array.isArray(shape.points) &&
+      shape.points.length >= 3 &&
+      shape.points.every(isValidPoint)
+    );
+  }
+  if (shape.type === 'circle') {
+    return Boolean(
+      typeof shape.id === 'string' &&
+      Number.isFinite(shape.x) &&
+      Number.isFinite(shape.y) &&
+      Number.isFinite(shape.radius)
+    );
+  }
+  return false;
+}

@@ -6,7 +6,13 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isValidStroke, isValidQuad, isValidSpotlight, MAX_STROKES } from './protocol.js';
+import {
+  isValidStroke,
+  isValidQuad,
+  isValidSpotlight,
+  isValidShape,
+  MAX_STROKES
+} from './protocol.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -16,6 +22,7 @@ const PORT = Number(process.env.PORT || 3001);
 
 const strokes = [];
 const peers = new Map();
+const shapes = [];
 
 // Projection mapping and light state
 let currentQuad = {
@@ -27,6 +34,55 @@ let currentQuad = {
 let calibrationActive = false;
 let blackoutActive = false;
 let activeSpotlight = null;
+
+// Scenes persistence (Phase 6)
+const scenesFile = path.resolve(__dirname, '../.scenes.json');
+let scenes = [
+  {
+    id: 'preset-clean',
+    name: 'Clean Light Canvas',
+    quad: { ...currentQuad },
+    strokes: [],
+    shapes: [],
+    createdAt: Date.now()
+  },
+  {
+    id: 'preset-cube',
+    name: '3D Cube Mapping Stage',
+    quad: { ...currentQuad },
+    strokes: [],
+    shapes: [
+      {
+        id: 'cube-demo',
+        type: 'cube',
+        x: 0.5,
+        y: 0.5,
+        size: 0.22,
+        rotX: 25,
+        rotY: 35,
+        rotZ: 0,
+        color: '#00ffff',
+        lineWidth: 3
+      }
+    ],
+    createdAt: Date.now()
+  }
+];
+
+try {
+  if (fs.existsSync(scenesFile)) {
+    const savedScenes = JSON.parse(fs.readFileSync(scenesFile, 'utf8'));
+    if (Array.isArray(savedScenes) && savedScenes.length > 0) {
+      scenes = savedScenes;
+    }
+  }
+} catch {}
+
+function saveScenesToDisk() {
+  try {
+    fs.writeFileSync(scenesFile, JSON.stringify(scenes, null, 2), 'utf8');
+  } catch {}
+}
 
 function getOrCreateSessionCode() {
   if (process.env.SESSION_CODE) return process.env.SESSION_CODE.toUpperCase();
@@ -81,7 +137,9 @@ app.get('/api/session', async (req, res) => {
       connected: peers.size,
       quad: currentQuad,
       calibration: calibrationActive,
-      blackout: blackoutActive
+      blackout: blackoutActive,
+      shapes,
+      scenes
     });
   } catch {
     res.status(500).json({ error: 'Could not generate pairing QR code.' });
@@ -100,6 +158,8 @@ io.on('connection', (socket) => {
     // Send complete current board and optical state
     socket.emit('board:init', strokes);
     socket.emit('warp:update', currentQuad);
+    socket.emit('shapes:update', shapes);
+    socket.emit('scenes:update', scenes);
     socket.emit('calibration:update', calibrationActive);
     socket.emit('blackout:update', blackoutActive);
     if (activeSpotlight) {
@@ -139,6 +199,61 @@ io.on('connection', (socket) => {
     if (!isValidQuad(quad)) return;
     currentQuad = quad;
     io.emit('warp:update', currentQuad);
+  });
+
+  // 3D Cubes & Geometric Mapping Shapes
+  socket.on('shape:add', (shape) => {
+    if (!isValidShape(shape)) return;
+    const idx = shapes.findIndex((s) => s.id === shape.id);
+    if (idx >= 0) shapes[idx] = shape;
+    else shapes.push(shape);
+    io.emit('shapes:update', shapes);
+  });
+
+  socket.on('shape:remove', (shapeId) => {
+    const idx = shapes.findIndex((s) => s.id === shapeId);
+    if (idx >= 0) {
+      shapes.splice(idx, 1);
+      io.emit('shapes:update', shapes);
+    }
+  });
+
+  socket.on('shapes:clear', () => {
+    shapes.length = 0;
+    io.emit('shapes:update', shapes);
+  });
+
+  // Scene presets & saving (Phase 6)
+  socket.on('scene:save', (sceneData) => {
+    if (!sceneData?.name) return;
+    const newScene = {
+      id: 'sc_' + Date.now().toString(36),
+      name: sceneData.name,
+      quad: { ...currentQuad },
+      strokes: [...strokes],
+      shapes: [...shapes],
+      createdAt: Date.now()
+    };
+    scenes.push(newScene);
+    saveScenesToDisk();
+    io.emit('scenes:update', scenes);
+  });
+
+  socket.on('scene:load', (sceneId) => {
+    const found = scenes.find((s) => s.id === sceneId);
+    if (found) {
+      if (found.quad) {
+        currentQuad = { ...found.quad };
+        io.emit('warp:update', currentQuad);
+      }
+      strokes.length = 0;
+      if (Array.isArray(found.strokes)) strokes.push(...found.strokes);
+      io.emit('board:init', strokes);
+
+      shapes.length = 0;
+      if (Array.isArray(found.shapes)) shapes.push(...found.shapes);
+      io.emit('shapes:update', shapes);
+    }
   });
 
   // Calibration test grid

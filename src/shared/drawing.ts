@@ -1,4 +1,4 @@
-// Shared drawing, projection mapping math, and optical light rendering
+// Shared drawing, projection mapping math, 3D cube wireframe, and optical light rendering
 
 export const LIGHT_PALETTE = [
   '#ffffff', // Pure White Beam
@@ -50,6 +50,37 @@ export interface Spotlight {
   active: boolean;
 }
 
+export interface CubeShape {
+  id: string;
+  type: 'cube';
+  x: number;
+  y: number;
+  size: number;
+  rotX: number;
+  rotY: number;
+  rotZ: number;
+  color: string;
+  lineWidth: number;
+}
+
+export interface MaskShape {
+  id: string;
+  type: 'mask';
+  points: Point[];
+}
+
+export interface CircleShape {
+  id: string;
+  type: 'circle';
+  x: number;
+  y: number;
+  radius: number;
+  rings: number;
+  color: string;
+}
+
+export type MappingShape = CubeShape | MaskShape | CircleShape;
+
 export const DEFAULT_QUAD: Quad = {
   tl: { x: 0, y: 0 },
   tr: { x: 1, y: 0 },
@@ -76,7 +107,7 @@ export function warpPoint(p: Point, quad: Quad = DEFAULT_QUAD): Point {
   };
 }
 
-// Render a stroke with curve smoothing, multi-layer glow, and quad warping
+// Render a stroke with multi-pass optical bloom, white-hot laser core, and quad warping
 export function drawStroke(
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
@@ -97,80 +128,288 @@ export function drawStroke(
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
+  // Helper to build smoothed path
+  const buildPath = () => {
+    ctx.beginPath();
+    if (pts.length === 1) {
+      const p0 = warpPoint(pts[0], quad);
+      ctx.arc(p0.x * canvasWidth, p0.y * canvasHeight, strokeWidth * 0.5, 0, Math.PI * 2);
+      return;
+    }
+    if (pts.length === 2) {
+      const p0 = warpPoint(pts[0], quad);
+      const p1 = warpPoint(pts[1], quad);
+      ctx.moveTo(p0.x * canvasWidth, p0.y * canvasHeight);
+      ctx.lineTo(p1.x * canvasWidth, p1.y * canvasHeight);
+      return;
+    }
+    const startPt = warpPoint(pts[0], quad);
+    ctx.moveTo(startPt.x * canvasWidth, startPt.y * canvasHeight);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const current = warpPoint(pts[i], quad);
+      const next = warpPoint(pts[i + 1], quad);
+      const midX = (current.x + next.x) * 0.5;
+      const midY = (current.y + next.y) * 0.5;
+      ctx.quadraticCurveTo(
+        current.x * canvasWidth,
+        current.y * canvasHeight,
+        midX * canvasWidth,
+        midY * canvasHeight
+      );
+    }
+    const lastPt = warpPoint(pts[pts.length - 1], quad);
+    ctx.lineTo(lastPt.x * canvasWidth, lastPt.y * canvasHeight);
+  };
+
   if (isEraser) {
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.strokeStyle = 'rgba(0,0,0,1)';
-    ctx.lineWidth = strokeWidth * 1.5;
-  } else {
-    ctx.globalCompositeOperation = glow ? 'screen' : 'source-over';
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = strokeWidth;
-
-    if (glow) {
-      ctx.shadowColor = stroke.color;
-      ctx.shadowBlur = Math.max(6, strokeWidth * 2.2);
-    }
-  }
-
-  // Single dot
-  if (pts.length === 1) {
-    const p0 = warpPoint(pts[0], quad);
-    ctx.beginPath();
-    ctx.arc(p0.x * canvasWidth, p0.y * canvasHeight, strokeWidth * 0.5, 0, Math.PI * 2);
-    if (isEraser) {
+    buildPath();
+    if (pts.length === 1) {
       ctx.fillStyle = 'rgba(0,0,0,1)';
       ctx.fill();
     } else {
-      ctx.fillStyle = stroke.color;
-      ctx.fill();
+      ctx.lineWidth = strokeWidth * 1.8;
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+      ctx.stroke();
     }
     ctx.restore();
     return;
   }
 
-  // 2 points: simple line
-  if (pts.length === 2) {
-    const p0 = warpPoint(pts[0], quad);
-    const p1 = warpPoint(pts[1], quad);
-    ctx.beginPath();
-    ctx.moveTo(p0.x * canvasWidth, p0.y * canvasHeight);
-    ctx.lineTo(p1.x * canvasWidth, p1.y * canvasHeight);
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
+  // Multi-pass Optical Light Bloom (MadMapper-style vibrant emission)
+  if (glow) {
+    ctx.globalCompositeOperation = 'lighter';
 
-  // 3+ points: quadratic Bezier midpoint smoothing
-  ctx.beginPath();
-  const startPt = warpPoint(pts[0], quad);
-  ctx.moveTo(startPt.x * canvasWidth, startPt.y * canvasHeight);
+    // Pass 1: Wide diffuse atmospheric bloom
+    ctx.shadowColor = stroke.color;
+    ctx.shadowBlur = Math.max(20, strokeWidth * 4.2);
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = strokeWidth * 1.6;
+    buildPath();
+    pts.length === 1 ? ctx.fill() : ctx.stroke();
 
-  for (let i = 1; i < pts.length - 1; i++) {
-    const current = warpPoint(pts[i], quad);
-    const next = warpPoint(pts[i + 1], quad);
-    const midX = (current.x + next.x) * 0.5;
-    const midY = (current.y + next.y) * 0.5;
-    ctx.quadraticCurveTo(
-      current.x * canvasWidth,
-      current.y * canvasHeight,
-      midX * canvasWidth,
-      midY * canvasHeight
-    );
-  }
+    // Pass 2: Saturated inner corona
+    ctx.shadowBlur = Math.max(10, strokeWidth * 2);
+    ctx.lineWidth = strokeWidth * 1.1;
+    buildPath();
+    pts.length === 1 ? ctx.fill() : ctx.stroke();
 
-  const lastPt = warpPoint(pts[pts.length - 1], quad);
-  ctx.lineTo(lastPt.x * canvasWidth, lastPt.y * canvasHeight);
-  ctx.stroke();
-
-  // Draw intense white-hot core for neon beams when glowing
-  if (glow && !isEraser && strokeWidth >= 3 && stroke.color !== '#ffffff') {
+    // Pass 3: White-hot laser center core
     ctx.shadowBlur = 0;
-    ctx.lineWidth = Math.max(1, strokeWidth * 0.35);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.stroke();
+    ctx.lineWidth = Math.max(1.5, strokeWidth * 0.42);
+    ctx.strokeStyle = '#ffffff';
+    buildPath();
+    if (pts.length === 1) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    } else {
+      ctx.stroke();
+    }
+  } else {
+    // Non-glow standard render
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = strokeWidth;
+    buildPath();
+    pts.length === 1 ? ctx.fill() : ctx.stroke();
   }
 
   ctx.restore();
+}
+
+// 3D Cube Wireframe for physical box and object projection mapping
+export function draw3DCube(
+  ctx: CanvasRenderingContext2D,
+  cube: CubeShape,
+  canvasWidth: number,
+  canvasHeight: number,
+  quad: Quad = DEFAULT_QUAD
+): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  const radX = (cube.rotX * Math.PI) / 180;
+  const radY = (cube.rotY * Math.PI) / 180;
+  const radZ = (cube.rotZ * Math.PI) / 180;
+
+  // 8 unit cube vertices (-0.5 to 0.5)
+  const half = cube.size * 0.5;
+  const rawVertices = [
+    { x: -half, y: -half, z: -half }, // 0: Front top left
+    { x: half, y: -half, z: -half },  // 1: Front top right
+    { x: half, y: half, z: -half },   // 2: Front bot right
+    { x: -half, y: half, z: -half },  // 3: Front bot left
+    { x: -half, y: -half, z: half },  // 4: Back top left
+    { x: half, y: -half, z: half },   // 5: Back top right
+    { x: half, y: half, z: half },    // 6: Back bot right
+    { x: -half, y: half, z: half }    // 7: Back bot left
+  ];
+
+  // Rotate and project to 2D normalized coordinates
+  const projected = rawVertices.map((v) => {
+    // Rotate around X
+    let y1 = v.y * Math.cos(radX) - v.z * Math.sin(radX);
+    let z1 = v.y * Math.sin(radX) + v.z * Math.cos(radX);
+
+    // Rotate around Y
+    let x2 = v.x * Math.cos(radY) + z1 * Math.sin(radY);
+    let z2 = -v.x * Math.sin(radY) + z1 * Math.cos(radY);
+
+    // Rotate around Z
+    let x3 = x2 * Math.cos(radZ) - y1 * Math.sin(radZ);
+    let y3 = x2 * Math.sin(radZ) + y1 * Math.cos(radZ);
+
+    // Perspective projection factor
+    const dist = 1.8;
+    const fov = dist / (dist + z2);
+
+    const normPt: Point = {
+      x: cube.x + x3 * fov,
+      y: cube.y + y3 * fov
+    };
+
+    // Apply projection quad keystone warping
+    const warped = warpPoint(normPt, quad);
+    return {
+      x: warped.x * canvasWidth,
+      y: warped.y * canvasHeight
+    };
+  });
+
+  // 12 edges connecting the cube faces
+  const edges = [
+    [0, 1], [1, 2], [2, 3], [3, 0], // Front face
+    [4, 5], [5, 6], [6, 7], [7, 4], // Back face
+    [0, 4], [1, 5], [2, 6], [3, 7]  // Connecting pillars
+  ];
+
+  // Pass 1: Outer glowing neon halo
+  ctx.strokeStyle = cube.color;
+  ctx.shadowColor = cube.color;
+  ctx.shadowBlur = 18;
+  ctx.lineWidth = cube.lineWidth * 1.5;
+
+  ctx.beginPath();
+  for (const [a, b] of edges) {
+    ctx.moveTo(projected[a].x, projected[a].y);
+    ctx.lineTo(projected[b].x, projected[b].y);
+  }
+  ctx.stroke();
+
+  // Pass 2: Sharp core beam
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = Math.max(1, cube.lineWidth * 0.4);
+  ctx.stroke();
+
+  // Render corner vertices for visual tracing handles
+  for (let i = 0; i < projected.length; i++) {
+    const pt = projected[i];
+    ctx.fillStyle = cube.color;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// Polygon Mask / Cutout: cuts off 100% of projector light over physical objects (TV, picture frame)
+export function drawPolygonMask(
+  ctx: CanvasRenderingContext2D,
+  mask: MaskShape,
+  canvasWidth: number,
+  canvasHeight: number,
+  quad: Quad = DEFAULT_QUAD,
+  showGuides: boolean = false
+): void {
+  if (!mask.points || mask.points.length < 3) return;
+
+  ctx.save();
+  const warpedPts = mask.points.map((p) => {
+    const w = warpPoint(p, quad);
+    return { x: w.x * canvasWidth, y: w.y * canvasHeight };
+  });
+
+  // 1. Cutout light: pitch black fill (0 photons from projector)
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = '#000000';
+  ctx.beginPath();
+  ctx.moveTo(warpedPts[0].x, warpedPts[0].y);
+  for (let i = 1; i < warpedPts.length; i++) {
+    ctx.lineTo(warpedPts[i].x, warpedPts[i].y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // 2. Alignment dashed border if guides are enabled
+  if (showGuides) {
+    ctx.strokeStyle = 'rgba(255, 0, 85, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.restore();
+}
+
+// Concentric Glowing Target Circles
+export function drawTargetCircle(
+  ctx: CanvasRenderingContext2D,
+  circle: CircleShape,
+  canvasWidth: number,
+  canvasHeight: number,
+  quad: Quad = DEFAULT_QUAD
+): void {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const center = warpPoint({ x: circle.x, y: circle.y }, quad);
+  const cx = center.x * canvasWidth;
+  const cy = center.y * canvasHeight;
+  const baseR = circle.radius * canvasWidth;
+
+  ctx.strokeStyle = circle.color;
+  ctx.shadowColor = circle.color;
+  ctx.shadowBlur = 14;
+  ctx.lineWidth = 2;
+
+  const count = Math.max(1, circle.rings || 3);
+  for (let i = 1; i <= count; i++) {
+    const r = (baseR / count) * i;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Crosshairs
+  ctx.beginPath();
+  ctx.moveTo(cx - baseR * 1.2, cy);
+  ctx.lineTo(cx + baseR * 1.2, cy);
+  ctx.moveTo(cx, cy - baseR * 1.2);
+  ctx.lineTo(cx, cy + baseR * 1.2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// Render all active geometric shapes
+export function drawMappingShapes(
+  ctx: CanvasRenderingContext2D,
+  shapes: MappingShape[],
+  canvasWidth: number,
+  canvasHeight: number,
+  quad: Quad = DEFAULT_QUAD,
+  showGuides: boolean = false
+): void {
+  for (const s of shapes) {
+    if (s.type === 'cube') {
+      draw3DCube(ctx, s, canvasWidth, canvasHeight, quad);
+    } else if (s.type === 'mask') {
+      drawPolygonMask(ctx, s, canvasWidth, canvasHeight, quad, showGuides);
+    } else if (s.type === 'circle') {
+      drawTargetCircle(ctx, s, canvasWidth, canvasHeight, quad);
+    }
+  }
 }
 
 // Draw projection mapping calibration grid (test pattern)
@@ -192,7 +431,7 @@ export function drawCalibrationGrid(
   ctx.strokeStyle = '#00f0ff';
   ctx.lineWidth = 3;
   ctx.shadowColor = '#00f0ff';
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = 12;
   ctx.beginPath();
   ctx.moveTo(tl.x, tl.y);
   ctx.lineTo(tr.x, tr.y);
@@ -311,7 +550,7 @@ export function drawSpotlightBeam(
   const r = Math.max(15, radius * canvasWidth);
 
   ctx.save();
-  ctx.globalCompositeOperation = 'screen';
+  ctx.globalCompositeOperation = 'lighter';
 
   const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
   grad.addColorStop(0, '#ffffff'); // bright center
@@ -336,16 +575,16 @@ export function drawSpotlightBeam(
   ctx.restore();
 }
 
-// Interactive corner detection helper for drag handles
-export function getQuadCornerAt(
-  clickPos: Point,
+// Mobile & Desktop touch detection for corner pins
+export function getCornerHandleUnderTouch(
+  touchPos: Point,
   quad: Quad,
-  threshold: number = 0.05
+  hitThreshold: number = 0.12 // generous touch target for fingers
 ): 'tl' | 'tr' | 'br' | 'bl' | null {
   const dist = (p1: Point, p2: Point) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
-  if (dist(clickPos, quad.tl) <= threshold) return 'tl';
-  if (dist(clickPos, quad.tr) <= threshold) return 'tr';
-  if (dist(clickPos, quad.br) <= threshold) return 'br';
-  if (dist(clickPos, quad.bl) <= threshold) return 'bl';
+  if (dist(touchPos, quad.tl) <= hitThreshold) return 'tl';
+  if (dist(touchPos, quad.tr) <= hitThreshold) return 'tr';
+  if (dist(touchPos, quad.br) <= hitThreshold) return 'br';
+  if (dist(touchPos, quad.bl) <= hitThreshold) return 'bl';
   return null;
 }

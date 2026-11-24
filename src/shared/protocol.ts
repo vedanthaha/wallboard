@@ -1,4 +1,4 @@
-// Shared protocol — stroke, quad and light validation
+// Shared protocol — stroke, quad, shape and scene validation
 
 export const MAX_POINTS_PER_STROKE = 12000;
 export const MAX_STROKES = 5000;
@@ -31,6 +31,46 @@ export interface Spotlight {
   radius: number;
   color: string;
   active: boolean;
+}
+
+export interface CubeShape {
+  id: string;
+  type: 'cube';
+  x: number;
+  y: number;
+  size: number;
+  rotX: number;
+  rotY: number;
+  rotZ: number;
+  color: string;
+  lineWidth: number;
+}
+
+export interface MaskShape {
+  id: string;
+  type: 'mask';
+  points: Point[];
+}
+
+export interface CircleShape {
+  id: string;
+  type: 'circle';
+  x: number;
+  y: number;
+  radius: number;
+  rings: number;
+  color: string;
+}
+
+export type MappingShape = CubeShape | MaskShape | CircleShape;
+
+export interface Scene {
+  id: string;
+  name: string;
+  quad: Quad;
+  strokes: Stroke[];
+  shapes: MappingShape[];
+  createdAt: number;
 }
 
 export function isValidPoint(point: unknown): point is Point {
@@ -94,4 +134,36 @@ export function isValidSpotlight(spotlight: unknown): spotlight is Spotlight | n
     typeof s.color === 'string' &&
     typeof s.active === 'boolean'
   );
+}
+
+export function isValidShape(shape: unknown): shape is MappingShape {
+  if (!shape || typeof shape !== 'object') return false;
+  const s = shape as Record<string, unknown>;
+  if (s.type === 'cube') {
+    return Boolean(
+      typeof s.id === 'string' &&
+      Number.isFinite(s.x) &&
+      Number.isFinite(s.y) &&
+      Number.isFinite(s.size) &&
+      (s.size as number) > 0 &&
+      typeof s.color === 'string'
+    );
+  }
+  if (s.type === 'mask') {
+    return Boolean(
+      typeof s.id === 'string' &&
+      Array.isArray(s.points) &&
+      s.points.length >= 3 &&
+      s.points.every(isValidPoint)
+    );
+  }
+  if (s.type === 'circle') {
+    return Boolean(
+      typeof s.id === 'string' &&
+      Number.isFinite(s.x) &&
+      Number.isFinite(s.y) &&
+      Number.isFinite(s.radius)
+    );
+  }
+  return false;
 }

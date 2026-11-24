@@ -3,14 +3,17 @@ import {
   drawStroke,
   drawCalibrationGrid,
   drawSpotlightBeam,
+  drawMappingShapes,
   DEFAULT_QUAD,
   Quad,
   Stroke,
-  Spotlight
+  Spotlight,
+  MappingShape
 } from '../shared/drawing';
 
 const canvas = document.getElementById('output-canvas') as HTMLCanvasElement;
 const strokes: Stroke[] = [];
+let shapes: MappingShape[] = [];
 let currentQuad: Quad = { ...DEFAULT_QUAD };
 let isCalibrationActive = false;
 let isBlackoutActive = false;
@@ -27,6 +30,7 @@ function joinSession() {
         socket.emit('join', { code: session.code, role: 'display' });
       }
       if (session?.quad) currentQuad = session.quad;
+      if (session?.shapes) shapes = session.shapes;
       if (session?.calibration !== undefined) isCalibrationActive = session.calibration;
       if (session?.blackout !== undefined) isBlackoutActive = session.blackout;
     })
@@ -67,6 +71,10 @@ socket.on('warp:update', (quad: Quad) => {
   if (quad) currentQuad = quad;
 });
 
+socket.on('shapes:update', (updatedShapes: MappingShape[]) => {
+  if (Array.isArray(updatedShapes)) shapes = updatedShapes;
+});
+
 socket.on('calibration:update', (active: boolean) => {
   isCalibrationActive = Boolean(active);
 });
@@ -79,7 +87,7 @@ socket.on('spotlight:update', (spotlight: Spotlight | null) => {
   activeSpotlight = spotlight;
 });
 
-// Continuous high-FPS render loop for optical decay, spotlights, and warping
+// Continuous high-FPS render loop for optical decay, 3D cubes, spotlights, and warping
 function renderLoop() {
   requestAnimationFrame(renderLoop);
   if (!canvas) return;
@@ -108,13 +116,18 @@ function renderLoop() {
     return;
   }
 
-  // Pitch black background (pure optical black)
+  // Pure optical black background (0 light)
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, rect.width, rect.height);
 
   const now = Date.now();
 
-  // Render strokes with laser decay handling
+  // 1. Render active geometric mapping shapes (3D Cubes, Circles, Polygon Masks)
+  if (shapes.length > 0) {
+    drawMappingShapes(ctx, shapes, rect.width, rect.height, currentQuad, isCalibrationActive);
+  }
+
+  // 2. Render light strokes with laser decay handling
   for (let i = strokes.length - 1; i >= 0; i--) {
     const stroke = strokes[i];
     let alpha = 1;
@@ -124,7 +137,6 @@ function renderLoop() {
       const ageMs = now - created;
       const totalMs = stroke.decaySeconds * 1000;
       if (ageMs >= totalMs) {
-        // Expired decay stroke — prune
         strokes.splice(i, 1);
         continue;
       }
@@ -134,7 +146,7 @@ function renderLoop() {
     drawStroke(ctx, stroke, rect.width, rect.height, true, currentQuad, alpha);
   }
 
-  // Render moving virtual spotlight beam
+  // 3. Render moving virtual spotlight beam
   if (activeSpotlight && activeSpotlight.active) {
     drawSpotlightBeam(
       ctx,
@@ -147,7 +159,7 @@ function renderLoop() {
     );
   }
 
-  // Render projection calibration test pattern (4-corner keystone alignment)
+  // 4. Render projection calibration test pattern (4-corner keystone alignment)
   if (isCalibrationActive) {
     drawCalibrationGrid(ctx, rect.width, rect.height, currentQuad);
   }

@@ -4,13 +4,17 @@ import {
   drawStroke,
   drawCalibrationGrid,
   drawSpotlightBeam,
-  warpPoint,
+  drawMappingShapes,
   DEFAULT_QUAD,
   Quad,
   Stroke,
   Point,
-  Spotlight
+  Spotlight,
+  MappingShape,
+  CubeShape,
+  LIGHT_PALETTE
 } from '../shared/drawing';
+import { Scene } from '../shared/protocol';
 import './studio.css';
 
 interface DisplayInfo {
@@ -34,6 +38,8 @@ interface SessionData {
   quad?: Quad;
   calibration?: boolean;
   blackout?: boolean;
+  shapes?: MappingShape[];
+  scenes?: Scene[];
 }
 
 declare global {
@@ -52,7 +58,7 @@ declare global {
   }
 }
 
-type StudioTab = 'preview' | 'displays' | 'light' | 'pairing';
+type StudioTab = 'preview' | 'displays' | 'shapes' | 'scenes' | 'light' | 'pairing';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<StudioTab>('preview');
@@ -69,6 +75,14 @@ export default function App() {
   const [isBlackout, setIsBlackout] = useState(false);
   const [isCalibration, setIsCalibration] = useState(false);
   const [activeSpotlight, setActiveSpotlight] = useState<Spotlight | null>(null);
+
+  // Geometric 3D Shapes & Tracing (Phase 5)
+  const [shapes, setShapes] = useState<MappingShape[]>([]);
+  const [activeCube, setActiveCube] = useState<CubeShape | null>(null);
+
+  // Scenes & Presets (Phase 6)
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [newSceneName, setNewSceneName] = useState('');
 
   const previewRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<Stroke[]>([]);
@@ -117,7 +131,12 @@ export default function App() {
 
     const now = Date.now();
 
-    // Render strokes with decay
+    // 1. Render active 3D cubes and geometric shapes
+    if (shapes.length > 0) {
+      drawMappingShapes(ctx, shapes, rect.width, rect.height, quad, isCalibration);
+    }
+
+    // 2. Render strokes with multi-pass bloom
     for (let i = strokesRef.current.length - 1; i >= 0; i--) {
       const stroke = strokesRef.current[i];
       let alpha = 1;
@@ -134,7 +153,7 @@ export default function App() {
       drawStroke(ctx, stroke, rect.width, rect.height, true, quad, alpha);
     }
 
-    // Moving virtual spotlight beam
+    // 3. Moving virtual spotlight beam
     if (activeSpotlight && activeSpotlight.active) {
       drawSpotlightBeam(
         ctx,
@@ -147,7 +166,7 @@ export default function App() {
       );
     }
 
-    // Calibration Grid
+    // 4. Calibration Grid
     if (isCalibration) {
       drawCalibrationGrid(ctx, rect.width, rect.height, quad);
     }
@@ -192,7 +211,7 @@ export default function App() {
     ctx.closePath();
     ctx.stroke();
     ctx.setLineDash([]);
-  }, [quad, draggingCorner, isBlackout, isCalibration, activeSpotlight]);
+  }, [quad, draggingCorner, isBlackout, isCalibration, activeSpotlight, shapes]);
 
   // Query system displays
   const refreshDisplays = useCallback(async () => {
@@ -213,6 +232,12 @@ export default function App() {
       .then((data: SessionData) => {
         setSession(data);
         if (data.quad) setQuad(data.quad);
+        if (data.shapes) {
+          setShapes(data.shapes);
+          const cube = data.shapes.find((s) => s.type === 'cube') as CubeShape;
+          if (cube) setActiveCube(cube);
+        }
+        if (data.scenes) setScenes(data.scenes);
         if (data.calibration !== undefined) setIsCalibration(data.calibration);
         if (data.blackout !== undefined) setIsBlackout(data.blackout);
         if (socketRef.current && data.code) {
@@ -279,6 +304,18 @@ export default function App() {
 
     socket.on('warp:update', (newQuad: Quad) => {
       if (newQuad) setQuad(newQuad);
+    });
+
+    socket.on('shapes:update', (updatedShapes: MappingShape[]) => {
+      if (Array.isArray(updatedShapes)) {
+        setShapes(updatedShapes);
+        const cube = updatedShapes.find((s) => s.type === 'cube') as CubeShape;
+        if (cube) setActiveCube(cube);
+      }
+    });
+
+    socket.on('scenes:update', (updatedScenes: Scene[]) => {
+      if (Array.isArray(updatedScenes)) setScenes(updatedScenes);
     });
 
     socket.on('calibration:update', (active: boolean) => {
@@ -399,6 +436,24 @@ export default function App() {
     socketRef.current?.emit('warp:update', next);
   };
 
+  const addOrUpdateCube = (updates: Partial<CubeShape>) => {
+    const existing = activeCube || {
+      id: 'cube_' + Date.now().toString(36),
+      type: 'cube' as const,
+      x: 0.5,
+      y: 0.5,
+      size: 0.22,
+      rotX: 25,
+      rotY: 35,
+      rotZ: 0,
+      color: '#00ffff',
+      lineWidth: 3
+    };
+    const updated = { ...existing, ...updates };
+    setActiveCube(updated);
+    socketRef.current?.emit('shape:add', updated);
+  };
+
   return (
     <div className="studio">
       {/* Studio Header */}
@@ -436,7 +491,7 @@ export default function App() {
               className={`studio-tab-btn ${activeTab === 'preview' ? 'active' : ''}`}
               onClick={() => setActiveTab('preview')}
             >
-              WARP & MAPPING
+              WARP
             </button>
             <button
               className={`studio-tab-btn ${activeTab === 'displays' ? 'active' : ''}`}
@@ -445,16 +500,28 @@ export default function App() {
               DISPLAYS
             </button>
             <button
+              className={`studio-tab-btn ${activeTab === 'shapes' ? 'active' : ''}`}
+              onClick={() => setActiveTab('shapes')}
+            >
+              3D CUBES
+            </button>
+            <button
+              className={`studio-tab-btn ${activeTab === 'scenes' ? 'active' : ''}`}
+              onClick={() => setActiveTab('scenes')}
+            >
+              SCENES
+            </button>
+            <button
               className={`studio-tab-btn ${activeTab === 'light' ? 'active' : ''}`}
               onClick={() => setActiveTab('light')}
             >
-              OPTICAL FX
+              OPTICAL
             </button>
             <button
               className={`studio-tab-btn ${activeTab === 'pairing' ? 'active' : ''}`}
               onClick={() => setActiveTab('pairing')}
             >
-              PAIRING QR
+              QR
             </button>
           </div>
 
@@ -564,7 +631,127 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 3: OPTICAL EFFECTS & LIGHT CONTROLS */}
+          {/* TAB 3: 3D CUBES & TRACING (Phase 5) */}
+          {activeTab === 'shapes' && (
+            <div className="sidebar-section">
+              <h2 className="sidebar-title">3D CUBE & OBJECT TRACING</h2>
+              <p className="sidebar-hint">
+                Project 3D wireframe boxes to map physical cubes or structures in your space.
+              </p>
+
+              <div className="preset-buttons">
+                <button className="btn-preset" onClick={() => addOrUpdateCube({})}>
+                  + Add 3D Cube
+                </button>
+                <button
+                  className="btn-preset btn-danger-subtle"
+                  onClick={() => socketRef.current?.emit('shapes:clear')}
+                >
+                  Clear
+                </button>
+              </div>
+
+              {activeCube && (
+                <div className="cube-editor-box" style={{ marginTop: '10px' }}>
+                  <div className="cube-controls-grid">
+                    <div className="control-item">
+                      <span>ROT X ({activeCube.rotX}°)</span>
+                      <input
+                        type="range"
+                        min="-90"
+                        max="90"
+                        value={activeCube.rotX}
+                        onChange={(e) => addOrUpdateCube({ rotX: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="control-item">
+                      <span>ROT Y ({activeCube.rotY}°)</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        value={activeCube.rotY}
+                        onChange={(e) => addOrUpdateCube({ rotY: Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="control-item">
+                      <span>SIZE</span>
+                      <input
+                        type="range"
+                        min="0.08"
+                        max="0.45"
+                        step="0.01"
+                        value={activeCube.size}
+                        onChange={(e) => addOrUpdateCube({ size: Number(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="swatches" style={{ padding: '6px 0 0' }}>
+                    {LIGHT_PALETTE.map((c) => (
+                      <button
+                        key={c}
+                        className={`swatch-btn ${activeCube.color === c ? 'chosen' : ''}`}
+                        style={{ background: c }}
+                        onClick={() => addOrUpdateCube({ color: c })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: SCENES & PRESETS (Phase 6) */}
+          {activeTab === 'scenes' && (
+            <div className="sidebar-section">
+              <h2 className="sidebar-title">SAVED SCENES & PRESETS</h2>
+              <p className="sidebar-hint">
+                Save and switch between different wall mapping setups.
+              </p>
+
+              <div className="save-scene-box">
+                <input
+                  type="text"
+                  placeholder="New scene name..."
+                  value={newSceneName}
+                  onChange={(e) => setNewSceneName(e.target.value)}
+                  className="scene-input"
+                />
+                <button
+                  className="btn-preset"
+                  disabled={!newSceneName.trim()}
+                  onClick={() => {
+                    socketRef.current?.emit('scene:save', { name: newSceneName.trim() });
+                    setNewSceneName('');
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+
+              <div className="scenes-list" style={{ marginTop: '10px' }}>
+                {scenes.map((sc) => (
+                  <div key={sc.id} className="scene-card">
+                    <div className="scene-info">
+                      <span className="scene-name">{sc.name}</span>
+                      <span className="scene-meta">
+                        {sc.shapes?.length || 0} shapes · {sc.strokes?.length || 0} strokes
+                      </span>
+                    </div>
+                    <button
+                      className="btn-output"
+                      onClick={() => socketRef.current?.emit('scene:load', sc.id)}
+                    >
+                      Load
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: OPTICAL EFFECTS & LIGHT CONTROLS */}
           {activeTab === 'light' && (
             <div className="sidebar-section">
               <h2 className="sidebar-title">OPTICAL & LIGHT ENGINE</h2>
@@ -598,7 +785,7 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB 4: PHONE PAIRING */}
+          {/* TAB 6: PHONE PAIRING */}
           {activeTab === 'pairing' && (
             <div className="sidebar-section qr-section">
               <h2 className="sidebar-title">PHONE PAIRING</h2>

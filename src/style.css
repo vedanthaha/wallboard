@@ -3,7 +3,7 @@
 :root {
   font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
   color: #20242b;
-  background: #0c0e12;
+  background: #07090c;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -15,25 +15,26 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #0c0e12;
+  background: #07090c;
   color: #ffffff;
   user-select: none;
   -webkit-user-select: none;
+  overflow-x: hidden;
 }
 
 /* Remote Shell */
 .remote-shell {
   min-height: 100dvh;
-  background: #090b0e;
-  padding: 14px;
-  max-width: 720px;
+  background: #07090c;
+  padding: 10px 12px;
+  max-width: 760px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
 }
 
 .remote-shell.dark {
-  background: #07090c;
+  background: #05070a;
   color: #ffffff;
 }
 
@@ -42,9 +43,9 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #1a1e27;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #161922;
 }
 
 .brand {
@@ -135,16 +136,16 @@ body {
 
 /* Join Panel */
 .join-panel {
-  padding: 26px 20px;
-  background: #12151c;
-  border: 1px solid #222733;
-  border-radius: 16px;
-  margin-top: 20px;
+  padding: 24px 18px;
+  background: #10131a;
+  border: 1px solid #1f2430;
+  border-radius: 14px;
+  margin-top: 16px;
 }
 
 .join-panel h1 {
-  font-size: clamp(28px, 6vw, 42px);
-  margin: 14px 0 10px;
+  font-size: clamp(26px, 5.5vw, 40px);
+  margin: 12px 0 8px;
   line-height: 1.1;
   letter-spacing: -.03em;
 }
@@ -152,12 +153,12 @@ body {
 .join-panel p {
   color: #8c93a0;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .join-panel label {
   display: block;
-  margin: 20px 0 10px;
+  margin: 16px 0 8px;
   font: 10px 'DM Mono', monospace;
   letter-spacing: .14em;
   color: #7b8190;
@@ -169,7 +170,7 @@ body {
   padding: 14px;
   border: 1px solid #2c3242;
   border-radius: 10px;
-  background: #0a0c10;
+  background: #07090c;
   color: #fff;
   font: 20px 'DM Mono', monospace;
   letter-spacing: .25em;
@@ -182,7 +183,7 @@ body {
   margin-top: 14px;
   border: 0;
   border-radius: 10px;
-  padding: 15px;
+  padding: 14px;
   background: #00f0ff;
   color: #000;
   font: 700 12px 'DM Mono', monospace;
@@ -196,12 +197,12 @@ body {
   cursor: not-allowed;
 }
 
-/* Mode Navigation Tabs */
+/* 6-Column Mode Navigation Tabs */
 .mode-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+  margin-bottom: 10px;
 }
 
 .mode-tab {
@@ -209,30 +210,30 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 10px 4px;
-  background: #12151c;
-  border: 1px solid #1f2430;
-  border-radius: 10px;
-  color: #8b929e;
+  padding: 8px 2px;
+  background: #0f1218;
+  border: 1px solid #1b202a;
+  border-radius: 8px;
+  color: #848c9a;
   cursor: pointer;
   transition: all .15s ease;
-  gap: 4px;
+  gap: 3px;
 }
 
 .mode-tab .tab-icon {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .mode-tab .tab-label {
-  font: 700 9px 'DM Mono', monospace;
-  letter-spacing: .08em;
+  font: 700 8px 'DM Mono', monospace;
+  letter-spacing: .06em;
 }
 
 .mode-tab.active {
-  background: #181d26;
+  background: #161c26;
   border-color: #00f0ff;
   color: #00f0ff;
-  box-shadow: 0 0 14px rgba(0, 240, 255, .15);
+  box-shadow: 0 0 12px rgba(0, 240, 255, .15);
 }
 
 /* Console & Drawing Panel */
@@ -253,15 +254,15 @@ body {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .btn-pill {
-  border: 1px solid #252b38;
-  background: #151821;
+  border: 1px solid #232936;
+  background: #12151d;
   color: #a2a9b6;
-  padding: 7px 11px;
-  border-radius: 7px;
+  padding: 6px 10px;
+  border-radius: 6px;
   font: 10px 'DM Mono', monospace;
   letter-spacing: .06em;
   cursor: pointer;
@@ -304,7 +305,7 @@ body {
 .swatches {
   display: flex;
   gap: 12px;
-  padding: 6px 2px 12px;
+  padding: 4px 2px 10px;
   align-items: center;
   overflow-x: auto;
 }
@@ -320,22 +321,22 @@ body {
 }
 
 .swatch-btn.chosen {
-  transform: scale(1.15);
+  transform: scale(1.18);
   border-color: #ffffff;
 }
 
-/* Touch Canvas Wrap */
-.phone-canvas-wrap {
+/* MAXIMIZED IMMERSIVE MOBILE CANVAS (NO DISTRACTING DOTS) */
+.phone-canvas-wrap.immersive {
   flex: 1;
-  min-height: 280px;
-  height: clamp(280px, 45dvh, 520px);
-  border: 1px solid #222733;
+  min-height: 340px;
+  height: clamp(340px, 58dvh, 680px);
+  border: 1px solid #1e2430;
   border-radius: 12px;
   overflow: hidden;
   background-color: #05070a;
-  background-image: radial-gradient(#151922 1px, transparent 1px);
-  background-size: 18px 18px;
+  background-image: none; /* Removed all dots per user request */
   position: relative;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.8);
 }
 
 .phone-canvas {
@@ -350,7 +351,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 4px 4px;
+  padding: 10px 4px 4px;
   font: 9px 'DM Mono', monospace;
   letter-spacing: .1em;
   color: #7b8085;
@@ -372,22 +373,22 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 12px;
+  gap: 10px;
 }
 
 .torch-instructions {
   font: 11px 'DM Mono', monospace;
   color: #7b8190;
   text-align: center;
-  padding: 4px;
+  padding: 2px;
 }
 
 .torch-pad {
   flex: 1;
-  min-height: 280px;
-  height: clamp(280px, 45dvh, 500px);
-  background: #090c10;
-  border: 1px solid #1f2533;
+  min-height: 320px;
+  height: clamp(320px, 55dvh, 600px);
+  background: #06080c;
+  border: 1px solid #1c222e;
   border-radius: 14px;
   position: relative;
   overflow: hidden;
@@ -395,24 +396,15 @@ body {
   cursor: crosshair;
 }
 
-.torch-pad-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to right, rgba(255,255,255,.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,.04) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
-
 .torch-reticle {
   position: absolute;
-  width: 56px;
-  height: 56px;
+  width: 58px;
+  height: 58px;
   transform: translate(-50%, -50%);
   border: 2px solid #ffffff;
   border-radius: 50%;
   pointer-events: none;
-  transition: transform .05s ease;
+  transition: transform .04s ease;
 }
 
 .torch-pad-idle {
@@ -421,7 +413,7 @@ body {
   display: grid;
   place-items: center;
   font: 12px 'DM Mono', monospace;
-  color: #4a5160;
+  color: #3b4250;
   letter-spacing: .12em;
   pointer-events: none;
 }
@@ -429,11 +421,11 @@ body {
 .torch-controls {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  background: #11141b;
-  padding: 12px;
+  gap: 8px;
+  background: #0f1218;
+  padding: 10px;
   border-radius: 10px;
-  border: 1px solid #1f2430;
+  border: 1px solid #1c212c;
 }
 
 .torch-slider-row {
@@ -454,12 +446,12 @@ body {
   justify-content: center;
 }
 
-/* Warp / 4-Corner Keystone Calibration */
+/* Warp / 4-Corner Touchpad & Controls */
 .warp-container {
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 12px;
+  gap: 10px;
 }
 
 .warp-banner {
@@ -472,18 +464,36 @@ body {
   border-radius: 8px;
 }
 
+/* Touch-Draggable Keystone Touchpad */
+.warp-touchpad-container {
+  min-height: 220px;
+  height: clamp(220px, 32dvh, 360px);
+  border: 1px solid #1f2533;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  background: #06080c;
+}
+
+.warp-touchpad {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  display: block;
+}
+
 .corner-selector-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
 }
 
 .corner-btn {
   display: flex;
   flex-direction: column;
-  padding: 10px 12px;
-  background: #131720;
-  border: 1px solid #232938;
+  padding: 8px 10px;
+  background: #0f131a;
+  border: 1px solid #1c222e;
   border-radius: 8px;
   color: #8a91a0;
   cursor: pointer;
@@ -492,18 +502,18 @@ body {
 }
 
 .corner-btn .corner-tag {
-  font: 700 10px 'DM Mono', monospace;
+  font: 700 9px 'DM Mono', monospace;
   letter-spacing: .06em;
 }
 
 .corner-btn .corner-coords {
-  font: 10px 'DM Mono', monospace;
+  font: 9px 'DM Mono', monospace;
   color: #5d6370;
   margin-top: 2px;
 }
 
 .corner-btn.active {
-  background: #19202c;
+  background: #161d28;
   border-color: #00f0ff;
   color: #00f0ff;
   box-shadow: 0 0 12px rgba(0, 240, 255, .15);
@@ -513,16 +523,16 @@ body {
   color: #80f7ff;
 }
 
-/* D-Pad Nudge Controls */
+/* D-Pad Micro Nudge Controls */
 .dpad-box {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 14px 0;
-  background: #0f1218;
-  border: 1px solid #1c212c;
-  border-radius: 12px;
+  gap: 5px;
+  padding: 10px 0;
+  background: #0b0d12;
+  border: 1px solid #181d26;
+  border-radius: 10px;
 }
 
 .dpad-mid-row {
@@ -532,13 +542,13 @@ body {
 }
 
 .dpad-btn {
-  width: 60px;
-  height: 52px;
-  background: #1a1e28;
-  border: 1px solid #2e3547;
-  border-radius: 8px;
+  width: 54px;
+  height: 46px;
+  background: #171b24;
+  border: 1px solid #282f3f;
+  border-radius: 7px;
   color: #ffffff;
-  font: 700 18px sans-serif;
+  font: 700 16px sans-serif;
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -553,11 +563,11 @@ body {
 }
 
 .dpad-center-label {
-  width: 60px;
-  height: 52px;
+  width: 54px;
+  height: 46px;
   display: grid;
   place-items: center;
-  font: 700 11px 'DM Mono', monospace;
+  font: 700 10px 'DM Mono', monospace;
   color: #00f0ff;
   letter-spacing: .08em;
 }
@@ -566,10 +576,10 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #11141b;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #1f2430;
+  background: #0f1218;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #1c212c;
 }
 
 .step-toggle {
@@ -580,5 +590,139 @@ body {
 
 .step-label {
   font: 9px 'DM Mono', monospace;
+  color: #6d7380;
+}
+
+/* 3D Cubes & Shapes (Phase 5) */
+.shapes-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 10px;
+}
+
+.shape-actions-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cube-editor-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #0d1016;
+  border: 1px solid #1a202c;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.editor-title {
+  font: 700 10px 'DM Mono', monospace;
+  letter-spacing: .12em;
+  color: #00f0ff;
+}
+
+.orbit-trackpad {
+  min-height: 140px;
+  height: 160px;
+  background: #06080c;
+  border: 1px solid #222a3a;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  cursor: grab;
+  padding: 12px;
+  gap: 6px;
+}
+
+.orbit-hint {
+  font: 11px 'DM Mono', monospace;
+  color: #7b8190;
+  text-align: center;
+}
+
+.orbit-readout {
+  font: 11px 'DM Mono', monospace;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.1);
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.cube-controls-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.control-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font: 9px 'DM Mono', monospace;
+  color: #8a91a0;
+}
+
+.control-item input {
+  accent-color: #00f0ff;
+}
+
+/* Scenes & Presets (Phase 6) */
+.scenes-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 12px;
+}
+
+.save-scene-box {
+  display: flex;
+  gap: 8px;
+}
+
+.scene-input {
+  flex: 1;
+  background: #0a0c10;
+  border: 1px solid #222836;
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: #ffffff;
+  font: 11px 'DM Mono', monospace;
+  outline: none;
+}
+
+.scenes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #0f1218;
+  border: 1px solid #1c212c;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.scene-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scene-name {
+  font: 700 11px 'DM Mono', monospace;
+  color: #ffffff;
+}
+
+.scene-meta {
+  font: 10px 'DM Mono', monospace;
   color: #6d7380;
 }

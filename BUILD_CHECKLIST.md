@@ -43,4 +43,4 @@ Status meanings: `DONE` = implemented and verified in this workspace; `IN PROGRE
 ## Release / publishing
 - [x] ZIP archive — packaged; runtime build still requires dependency installation
 - [x] GitHub repository — created by user
-- [x] Source published to GitHub — commit pending final verification
+- [x] Source published to GitHub — verified on `main`

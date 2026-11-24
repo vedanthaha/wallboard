@@ -10,24 +10,70 @@ import {
 const canvas = document.getElementById('output-canvas') as HTMLCanvasElement;
 let compositor: WallboardWebGLCompositor | null = null;
 
-let surfaces: Surface[] = [];
-let sources: Record<string, MediaSource> = {};
+const DEFAULT_SOURCE: MediaSource = {
+  id: 'src-gradient-cyber',
+  name: 'Cyberpunk Neon',
+  data: {
+    type: 'gradient_linear',
+    config: {
+      angle: 45,
+      stops: [
+        { offset: 0, color: '#00f0ff' },
+        { offset: 0.5, color: '#7000ff' },
+        { offset: 1, color: '#ff007f' }
+      ]
+    }
+  }
+};
+
+const DEFAULT_SURFACE: Surface = {
+  id: 'surface-1',
+  name: 'Surface 1',
+  sourceId: 'src-gradient-cyber',
+  blendMode: 'screen',
+  opacity: 1,
+  geometry: {
+    id: 'geom-1',
+    name: 'Quad 1',
+    type: 'quad',
+    zIndex: 0,
+    visible: true,
+    locked: false,
+    corners: {
+      tl: { x: 0.15, y: 0.15 },
+      tr: { x: 0.85, y: 0.15 },
+      br: { x: 0.85, y: 0.85 },
+      bl: { x: 0.15, y: 0.85 }
+    }
+  },
+  effects: [{ id: 'fx-bloom-1', type: 'bloom', enabled: true, params: { intensity: 1.2, radius: 0.5, threshold: 0.2 } }],
+  animations: [{ id: 'anim-rot-1', enabled: true, targetProperty: 'source.config.angle', duration: 8, loop: true, playbackSpeed: 1, keyframes: [{ time: 0, value: 0 }, { time: 8, value: 360 }] }]
+};
+
+// Immediate default surface so projector displays content instantly on open
+let surfaces: Surface[] = [DEFAULT_SURFACE];
+let sources: Record<string, MediaSource> = { 'src-gradient-cyber': DEFAULT_SOURCE };
 const strokes: DrawingStroke[] = [];
 let isMasterBlackout = false;
 let isCalibrationActive = false;
 
-// Connect to server
-const socket = io({ transports: ['websocket', 'polling'] });
+// Resolve server endpoint correctly across both http:// (Vite proxy) and file:// (Electron production)
+const SERVER_URL = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+const socket = io(SERVER_URL || undefined, { transports: ['websocket', 'polling'] });
 
 function joinSession() {
-  fetch('/api/session')
+  fetch(`${SERVER_URL}/api/session`)
     .then((r) => r.json())
     .then((session) => {
       if (session?.code) {
         socket.emit('join', { code: session.code, role: 'display' });
       }
-      if (Array.isArray(session?.surfaces)) surfaces = session.surfaces;
-      if (session?.sources) sources = session.sources;
+      if (Array.isArray(session?.surfaces) && session.surfaces.length > 0) {
+        surfaces = session.surfaces;
+      }
+      if (session?.sources && Object.keys(session.sources).length > 0) {
+        sources = session.sources;
+      }
       if (Array.isArray(session?.strokes)) strokes.push(...session.strokes);
       if (session?.blackout !== undefined) isMasterBlackout = session.blackout;
       if (session?.calibration !== undefined) isCalibrationActive = session.calibration;
@@ -40,8 +86,12 @@ joinSession();
 
 // State synchronization
 socket.on('state:init', (state) => {
-  if (Array.isArray(state?.surfaces)) surfaces = state.surfaces;
-  if (state?.sources) sources = state.sources;
+  if (Array.isArray(state?.surfaces) && state.surfaces.length > 0) {
+    surfaces = state.surfaces;
+  }
+  if (state?.sources && Object.keys(state.sources).length > 0) {
+    sources = state.sources;
+  }
   if (Array.isArray(state?.strokes)) {
     strokes.length = 0;
     strokes.push(...state.strokes);
@@ -51,7 +101,9 @@ socket.on('state:init', (state) => {
 });
 
 socket.on('surfaces:sync', (data) => {
-  if (Array.isArray(data?.surfaces)) surfaces = data.surfaces;
+  if (Array.isArray(data?.surfaces) && data.surfaces.length > 0) {
+    surfaces = data.surfaces;
+  }
 });
 
 socket.on('surface:update', (updated: Surface) => {

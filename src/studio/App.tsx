@@ -124,10 +124,11 @@ export default function App() {
 
   // Connect to Socket.IO and subscribe to state
   useEffect(() => {
-    const socket = io({ transports: ['websocket', 'polling'] });
+    const SERVER_URL = window.location.protocol === 'file:' ? 'http://localhost:3001' : '';
+    const socket = io(SERVER_URL || undefined, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
 
-    fetch('/api/session')
+    fetch(`${SERVER_URL}/api/session`)
       .then((r) => r.json())
       .then((data) => {
         setSession(data);

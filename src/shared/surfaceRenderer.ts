@@ -96,18 +96,19 @@ export class WallboardWebGLCompositor {
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -10, 10);
 
-    // Full-screen quad spanning [0, 0] to [1, 1] in normalized screen space
+    // Full-screen quad in Counter-Clockwise (CCW) winding in clip space
     this.geometry = new THREE.BufferGeometry();
     const vertices = new Float32Array([
       0, 0, 0,  // TL
-      1, 0, 0,  // TR
+      0, 1, 0,  // BL
       1, 1, 0,  // BR
 
       0, 0, 0,  // TL
       1, 1, 0,  // BR
-      0, 1, 0   // BL
+      1, 0, 0   // TR
     ]);
     this.geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    this.geometry.computeBoundingSphere();
   }
 
   public resize(width: number, height: number): void {
@@ -145,10 +146,12 @@ export class WallboardWebGLCompositor {
         transparent: true,
         depthTest: false,
         depthWrite: false,
+        side: THREE.DoubleSide, // Prevent any culling of projection surface
         blending: surface.blendMode === 'screen' ? THREE.AdditiveBlending : THREE.NormalBlending
       });
 
       const mesh = new THREE.Mesh(this.geometry, material);
+      mesh.frustumCulled = false; // Always render fullscreen quad
       mesh.renderOrder = surface.geometry.zIndex || 0;
       this.scene.add(mesh);
 
@@ -173,7 +176,7 @@ export class WallboardWebGLCompositor {
     isCalibration: boolean
   ): void {
     if (masterBlackout) {
-      this.renderer.clearColor();
+      this.renderer.clear();
       return;
     }
 
@@ -286,7 +289,6 @@ export class WallboardWebGLCompositor {
     // 3. Composite drawing strokes assigned to this surface
     const now = Date.now();
     for (const stroke of strokes) {
-      // Stroke matches this surface or is global
       if (stroke.surfaceId && stroke.surfaceId !== surface.id) {
         continue;
       }

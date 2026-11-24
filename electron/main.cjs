@@ -1,8 +1,21 @@
 const { app, BrowserWindow, ipcMain, screen, Menu } = require('electron');
 const path = require('node:path');
+const { fork } = require('node:child_process');
+const http = require('node:http');
 
 let studioWindow = null;
 let outputWindow = null;
+let serverProcess = null;
+
+function ensureServerRunning() {
+  const req = http.get('http://localhost:3001/api/session', () => {});
+  req.on('error', () => {
+    console.log('Starting internal Wallboard server on port 3001...');
+    serverProcess = fork(path.join(__dirname, '../server/index.js'), [], {
+      stdio: 'inherit'
+    });
+  });
+}
 
 async function getStudioUrl() {
   try {
@@ -157,6 +170,7 @@ ipcMain.handle('output:is-open', () => {
 Menu.setApplicationMenu(null);
 
 app.whenReady().then(async () => {
+  ensureServerRunning();
   await createStudioWindow();
 
   screen.on('display-added', () => {
@@ -183,5 +197,8 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  if (serverProcess) {
+    try { serverProcess.kill(); } catch {}
+  }
   app.quit();
 });

@@ -9,12 +9,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test('Milestone 1 vertical slice: end-to-end state synchronization', async (t) => {
-  // Read session code
   const sessionFile = path.resolve(__dirname, '../.session-code');
   const sessionCode = fs.existsSync(sessionFile) ? fs.readFileSync(sessionFile, 'utf8').trim() : '9V28Z2';
 
-  // We connect to the active server on port 3001 if running, or test protocol transitions
-  // Let's test against http://localhost:3001 if reachable, otherwise run mock socket verification
   const serverRunning = await new Promise((resolve) => {
     const req = http.get('http://localhost:3001/api/session', (res) => {
       resolve(res.statusCode === 200);
@@ -27,46 +24,56 @@ test('Milestone 1 vertical slice: end-to-end state synchronization', async (t) =
   });
 
   if (!serverRunning) {
-    // If dev server is not running in background during test, pass gracefully with note
     t.diagnostic('Dev server not running on port 3001, skipping live socket network test.');
     return;
   }
 
   // 1. Connect Projector Display Client
   const displaySocket = Client('http://localhost:3001', { transports: ['websocket'] });
-  const remoteSocket = Client('http://localhost:3001', { transports: ['websocket'] });
+  let remoteSocket = null;
 
   t.after(() => {
     displaySocket.disconnect();
-    remoteSocket.disconnect();
+    remoteSocket?.disconnect();
   });
 
   // Authenticate display
   await new Promise((resolve, reject) => {
-    displaySocket.on('connect', () => {
-      displaySocket.emit('join', { code: sessionCode, role: 'display' });
-    });
+    const timer = setTimeout(() => reject(new Error('Display connect timeout')), 4000);
+    const doJoin = () => displaySocket.emit('join', { code: sessionCode, role: 'display' });
+    if (displaySocket.connected) doJoin();
+    else displaySocket.once('connect', doJoin);
+
     displaySocket.on('state:init', (state) => {
+      clearTimeout(timer);
       assert.ok(Array.isArray(state.surfaces));
       assert.ok(state.sources);
       assert.ok(state.activeSurfaceId);
       resolve();
     });
-    displaySocket.on('join:error', reject);
-    setTimeout(() => reject(new Error('Display connect timeout')), 3000);
+    displaySocket.on('join:error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(err));
+    });
   });
 
   // Authenticate remote
+  remoteSocket = Client('http://localhost:3001', { transports: ['websocket'] });
   await new Promise((resolve, reject) => {
-    remoteSocket.on('connect', () => {
-      remoteSocket.emit('join', { code: sessionCode, role: 'remote' });
-    });
+    const timer = setTimeout(() => reject(new Error('Remote connect timeout')), 4000);
+    const doJoin = () => remoteSocket.emit('join', { code: sessionCode, role: 'remote' });
+    if (remoteSocket.connected) doJoin();
+    else remoteSocket.once('connect', doJoin);
+
     remoteSocket.on('state:init', (state) => {
+      clearTimeout(timer);
       assert.ok(Array.isArray(state.surfaces));
       resolve();
     });
-    remoteSocket.on('join:error', reject);
-    setTimeout(() => reject(new Error('Remote connect timeout')), 3000);
+    remoteSocket.on('join:error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(err));
+    });
   });
 
   // 2. Corner Pinning: Remote drags corner of Surface 1
@@ -119,7 +126,7 @@ test('Milestone 1 vertical slice: end-to-end state synchronization', async (t) =
   const strokeResult = await strokePromise;
   assert.equal(strokeResult.id, testStroke.id);
   assert.equal(strokeResult.surfaceId, 'surface-1');
-  assert.ok(strokeResult.t_network); // Verified telemetry timestamp
+  assert.ok(strokeResult.t_network);
 
   // 4. Blackout Shutter: Remote toggles blackout
   const blackoutPromise = new Promise((resolve) => {

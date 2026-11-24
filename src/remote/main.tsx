@@ -717,7 +717,7 @@ function Remote() {
   );
 }
 
-const container = document.getElementById('remote-root');
+const container = document.getElementById('root') || document.getElementById('remote-root');
 if (container) {
   const root = createRoot(container);
   root.render(<Remote />);

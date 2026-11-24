@@ -444,6 +444,9 @@ io.on('connection', (socket) => {
 if (process.env.NODE_ENV === 'production') {
   const dist = path.resolve(__dirname, '../dist');
   app.use(express.static(dist));
+  app.get('/remote', (_req, res) => res.sendFile(path.join(dist, 'remote.html')));
+  app.get('/output', (_req, res) => res.sendFile(path.join(dist, 'output.html')));
+  app.get('/studio', (_req, res) => res.sendFile(path.join(dist, 'studio.html')));
   app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 

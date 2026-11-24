@@ -3,7 +3,25 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'html-rewrite',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          const url = req.url || '';
+          if (url.startsWith('/remote') && !url.startsWith('/remote.html')) {
+            req.url = url.replace(/^\/remote(\?.*)?$/, '/remote.html$1');
+          } else if (url.startsWith('/output') && !url.startsWith('/output.html')) {
+            req.url = url.replace(/^\/output(\?.*)?$/, '/output.html$1');
+          } else if (url.startsWith('/studio') && !url.startsWith('/studio.html')) {
+            req.url = url.replace(/^\/studio(\?.*)?$/, '/studio.html$1');
+          }
+          next();
+        });
+      }
+    }
+  ],
   build: {
     rollupOptions: {
       input: {

@@ -1,15 +1,19 @@
 {
   "name": "wallboard",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "Interactive projection-control and drawing application",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:vite\" \"npm:dev:electron\"",
     "dev:server": "node --watch server/index.js",
-    "dev:client": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "start": "node server/index.js",
-    "test": "node --test"
+    "dev:vite": "vite",
+    "dev:electron": "wait-on tcp:5173 && electron .",
+    "build": "tsc && vite build",
+    "start": "electron .",
+    "test": "node --test server/protocol.test.js",
+    "preview": "vite preview"
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -20,8 +24,14 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
-    "vite": "^5.4.11"
+    "electron": "^33.2.0",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.11",
+    "wait-on": "^8.0.1"
   }
 }

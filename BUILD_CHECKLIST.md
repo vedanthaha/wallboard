@@ -1,46 +1,47 @@
-# Wallboard build checklist
+# Wallboard Build Checklist
 
 Status meanings: `DONE` = implemented and verified in this workspace; `IN PROGRESS` = partially implemented; `TODO` = not implemented; `BLOCKED` = requires external hardware/account/manual action.
 
-## Project setup
-- [x] Project structure and npm scripts — created
-- [x] React + Vite frontend scaffold — created
-- [x] Express + Socket.IO server scaffold — created
-- [x] Local network binding — configured to listen on `0.0.0.0`
-- [ ] Dependency installation — BLOCKED: npm registry install timed out in this environment
+## Phase 1: Electron Shell & Dedicated Projector Output
+- [x] Electron application shell and lifecycle — implemented (`electron/main.cjs`, `electron/preload.cjs`)
+- [x] Multi-display enumeration and detection — implemented (`screen.getAllDisplays()`, `screen.getPrimaryDisplay()`)
+- [x] Dynamic display hotplug tracking — implemented (`display-added`, `display-removed`, `display-metrics-changed`)
+- [x] Dedicated Projector Output window — implemented (`src/output/main.tsx`, `output.html`)
+  - [x] Borderless fullscreen targeting selected display coordinates
+  - [x] Zero browser chrome, zero window frame, zero taskbar
+  - [x] Pitch black optical canvas (`#000000` = zero light emission from projector lamp)
+  - [x] Real-time stroke synchronization via Socket.IO
+  - [x] Interactive hotkeys: F11/F (fullscreen), B (blackout), C (calibration grid)
 
-## Display experience
-- [x] Full-screen display canvas — implemented
-- [x] Pairing QR code and session code — implemented
-- [x] Connection / phone presence indicators — implemented
-- [ ] Browser kiosk / auto-fullscreen launch — TODO
+## Phase 2: Phone QR Pairing & Real-time Drawing
+- [x] Local LAN pairing with persistent session code — implemented (`server/index.js`, `.session-code`)
+- [x] Mobile pointer/touch event handling with touch-action isolation — implemented (`src/remote/main.tsx`)
+- [x] Normalized 2D coordinate system across different aspect ratios — implemented
+- [x] Smooth curve interpolation using quadratic Bezier midpoint smoothing — implemented (`src/shared/drawing.ts`)
+- [x] Reconnection and session state synchronization — implemented
 
-## Phone remote
-- [x] Phone route and session-code entry — implemented
-- [x] Pointer/touch drawing input — implemented
-- [x] Pen color and brush-size controls — implemented
-- [x] Eraser, undo and clear controls — implemented
-- [ ] Pan and zoom gestures — TODO
-- [ ] Text, shapes, sticky notes and image import — TODO
+## Phase 3: Brushes, Colors, Eraser, Undo/Redo & Light Modes
+- [x] High-luminosity projection light palette (White Beam, Cyan, Neon Green, Amber, UV Magenta, Crimson, Violet) — implemented
+- [x] Optical cutout eraser (`#000000` / `destination-out`) — implemented
+- [x] Undo and clear canvas — implemented
+- [x] Beam width slider with normalized thickness scaling — implemented
 
-## Realtime and reliability
-- [x] Socket.IO realtime transport — implemented
-- [x] Server-side stroke payload validation — implemented
-- [x] Initial board sync on join — implemented
-- [ ] Persistent board storage — TODO
-- [ ] Reconnect replay / offline queue — TODO
-- [ ] Robust multi-user undo and conflict handling — TODO
-- [ ] Configurable production origin for QR links — TODO
+## Phase 4: Glow, Gradients, Brightness & Light Effects
+- [x] Real-time multi-layer beam glow bloom (`shadowBlur` + white-hot core) — implemented
+- [x] Optical additive light blending (`screen` / `lighter`) — implemented
+- [x] Dynamic laser trail decay with continuous rAF animation loop (1.0s, 2.5s, 5.0s presets) — implemented
+- [x] Virtual moving spotlight / torch beam mode with radial feathering and color selection — implemented
+- [x] Projector shutter / Blackout mode (instant 0 light cutoff) — implemented
+
+## Phase 5: Projection Mapping, Corner Pinning & Calibration
+- [x] 4-corner perspective quad warping / keystone calibration math (`warpPoint`) — implemented
+- [x] Real-time keystone synchronization over Socket.IO (`warp:update`) — implemented
+- [x] Projection mapping calibration test pattern with crosshairs and numbered corner targets — implemented
+- [x] Interactive drag-handle Quad Warper directly on Desktop Studio canvas — implemented
+- [x] Tactile 4-way D-Pad keystone calibration console on Android Phone Remote — implemented
+- [x] Aspect ratio presets (16:9, 16:10, 4:3, Full bounds) — implemented
 
 ## Verification
-- [x] `node --test` — 3 passed, 0 failed
-- [ ] `npm install` — BLOCKED: registry timeout in build environment
-- [ ] `npm run build` — not verified because dependencies were unavailable
-- [ ] Laptop + phone same-Wi-Fi test — requires user hardware
-- [ ] Projector HDMI test — requires user hardware
-- [ ] Drawing latency test — requires user hardware
-
-## Release / publishing
-- [x] ZIP archive — packaged; runtime build still requires dependency installation
-- [x] GitHub repository — created by user
-- [x] Source published to GitHub — verified on `main`
+- [x] `node --test server/protocol.test.js` — 5 passed, 0 failed
+- [x] `npm install` — completed successfully
+- [x] `npm run build` (`tsc && vite build`) — completed successfully, generated studio, output, index, remote bundles

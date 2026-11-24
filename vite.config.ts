@@ -1,0 +1,27 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    rollupOptions: {
+      input: {
+        studio: resolve(__dirname, 'studio.html'),
+        output: resolve(__dirname, 'output.html'),
+        index: resolve(__dirname, 'index.html'),
+        remote: resolve(__dirname, 'remote.html')
+      }
+    }
+  },
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    // Allow all tunnel domains (localtunnel, cloudflare, ngrok) permanently without manual entry
+    allowedHosts: true,
+    proxy: {
+      '/socket.io': { target: 'http://localhost:3001', ws: true },
+      '/api': 'http://localhost:3001'
+    }
+  }
+});

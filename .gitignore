@@ -1,5 +1,8 @@
 node_modules/
 dist/
+dist-electron/
 .env
+.session-code
 .DS_Store
 *.log
+*.exe
